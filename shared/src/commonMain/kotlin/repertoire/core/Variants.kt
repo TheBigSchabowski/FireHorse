@@ -1,0 +1,71 @@
+package repertoire.core
+
+import kotlinx.serialization.Serializable
+
+/** A named position, entered by playing the moves that lead to it from the start. */
+@Serializable
+data class Variant(
+    val id: String,
+    /** e.g. "Sizilianisch" */
+    val opening: String,
+    /** e.g. "Scheveningen" */
+    val name: String,
+    /** Moves from the start position in UCI notation ("e2e4"). */
+    val moves: List<String>,
+    /** Board orientation while training this variant. */
+    val playWhite: Boolean = true,
+) {
+    /** Start position followed by the position after each move. */
+    val positions: List<Position> by lazy {
+        moves.runningFold(Position.START) { p, uci -> p.play(Move.fromUci(uci)) }
+    }
+
+    val target: Position get() = positions.last()
+
+    /** ["1. e4", "1... c5", ...] */
+    fun numberedSan(): List<String> = moves.mapIndexed { i, uci -> numberedSan(positions[i], Move.fromUci(uci)) }
+}
+
+fun numberedSan(before: Position, move: Move): String {
+    val san = before.san(move)
+    return if (before.whiteToMove) "${before.fullmoveNumber}. $san" else "${before.fullmoveNumber}... $san"
+}
+
+/** ["1. e4", "1... c5", "2. Nf3"] → "1. e4 c5 2. Nf3" */
+fun compactMoves(numbered: List<String>): String =
+    numbered.joinToString(" ").replace(Regex("(\\d+)\\. (\\S+) \\1\\.\\.\\. "), "$1. $2 ")
+
+/**
+ * The puzzle for one variant: reach [targetKey] from the start. [guide] maps every position from
+ * which one of the saved variants continues to the target to that continuation, so any move order
+ * stored in the library counts (transpositions included).
+ */
+class Quiz(
+    val variant: Variant,
+    val targetKey: String,
+    val guide: Map<String, Move>,
+    /** Every position of every saved variant, to tell "other variant" apart from "wrong". */
+    val knownKeys: Set<String>,
+    /** Final position → title of the variant(s) ending there. */
+    val namesByKey: Map<String, String>,
+)
+
+object QuizBuilder {
+    fun build(variants: List<Variant>): List<Quiz> {
+        val usable = variants.filter { it.moves.isNotEmpty() }
+        val knownKeys = usable.flatMap { v -> v.positions.map { it.key } }.toSet()
+        val namesByKey = usable.groupBy { it.target.key }.mapValues { (_, vs) -> vs.joinToString(" / ") { title(it) } }
+        return usable.map { variant ->
+            val targetKey = variant.target.key
+            val guide = mutableMapOf<String, Move>()
+            for (v in usable) {
+                val keys = v.positions.map { it.key }
+                val reach = keys.indexOf(targetKey)
+                for (i in 0 until reach) guide.putIfAbsent(keys[i], Move.fromUci(v.moves[i]))
+            }
+            Quiz(variant, targetKey, guide, knownKeys, namesByKey)
+        }
+    }
+
+    fun title(v: Variant): String = listOf(v.opening, v.name).filter { it.isNotBlank() }.joinToString(" › ")
+}
