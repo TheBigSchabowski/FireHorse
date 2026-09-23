@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -34,18 +35,17 @@ import repertoire.core.compactMoves
 import repertoire.core.currentTimeMillis
 import repertoire.core.shortDate
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
     Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Eröffnungs-Puzzle", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            Button(onClick = { vm.newVariant() }) { Text("+ Neue Variante") }
-        }
+        Text("Eröffnungs-Puzzle", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }
             OutlinedButton(onClick = vm::startCram, enabled = stats.total > 0) { Text("Frei üben") }
+            FilledTonalButton(onClick = { vm.newVariant() }) { Text("+ Neue Variante") }
         }
         Spacer(Modifier.height(6.dp))
         Text("${stats.due} fällig · ${stats.new} neu · ${stats.total} Varianten", style = MaterialTheme.typography.bodyMedium)

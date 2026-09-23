@@ -43,7 +43,15 @@ Gespeichert wird auf dem Mac in `~/Documents/EroeffnungsPuzzle`, auf Android im 
 ./gradlew :shared:desktopTest        # Tests (Zuggenerator mit Perft, Puzzle-Logik)
 ./gradlew :desktopApp:renderScreens  # Bildschirme in Handy- und Desktopgröße nach desktopApp/build/screens
 ./tools/build-release.sh             # DMG + signiertes APK nach dist/releases
+./tools/android-emulator.sh          # APK auf einem unsichtbaren Emulator starten, Screenshot nach build/emulator.png
 ```
+
+Der Emulator (Pixel 6, Android 16) läuft ohne Fenster und wird über `adb` bedient, z. B.
+`adb shell input tap X Y`. `./tools/android-emulator.sh shot name` macht ein weiteres
+Bildschirmfoto, `./tools/android-emulator.sh stop` beendet ihn.
+
+Die Figuren-PNGs und das Icon entstehen aus `tools/pieces-svg/` mit `tools/RenderPieces.java`
+(Skia aus Compose Desktop). Ein Test prüft, dass keine Figur leer ist.
 
 Voraussetzungen: Android SDK unter `~/Library/Android/sdk`, ein JDK (Gradle besorgt sich JDK 21
 selbst). `-PdataDir=/ordner` startet die Desktop-App mit einem anderen Datenordner,
