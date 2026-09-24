@@ -40,6 +40,10 @@ fun main() = application {
                 event.type != KeyEventType.KeyDown -> false
                 // Cmd/Ctrl+T opens the theory field while entering a variant.
                 command && event.key == Key.T && viewModel.editor != null -> viewModel.toggleTheory().let { true }
+                // Arrow keys step through the moves of the variant being edited. A focused text
+                // field gets them first, so typing in "Theorie" is not affected.
+                viewModel.editor != null && event.key == Key.DirectionLeft -> viewModel.editorStepBack().let { true }
+                viewModel.editor != null && event.key == Key.DirectionRight -> viewModel.editorStepForward().let { true }
                 // Enter checks the theory gaps, then Enter / Space answers "Gut" (or "Weiter" after a mistake).
                 session?.attempt?.finished != true -> false
                 event.key == Key.Enter -> viewModel.confirm().let { true }

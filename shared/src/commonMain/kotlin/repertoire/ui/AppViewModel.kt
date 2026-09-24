@@ -63,7 +63,16 @@ class TrainingSession(
 }
 
 /** A variant being entered: play the moves, then name it. */
-class EditorState(val editingId: String?, opening: String, name: String, moves: List<Move>, playWhite: Boolean, theory: String = "") {
+class EditorState(
+    val editingId: String?,
+    opening: String,
+    name: String,
+    moves: List<Move>,
+    playWhite: Boolean,
+    theory: String = "",
+    /** Open the board at the start instead of at the end of the line, to step through it. */
+    fromStart: Boolean = false,
+) {
     var opening by mutableStateOf(opening)
     var name by mutableStateOf(name)
     var moves by mutableStateOf(moves)
@@ -76,7 +85,25 @@ class EditorState(val editingId: String?, opening: String, name: String, moves: 
     /** Bumped to move the keyboard focus into the theory field. */
     var focusTheory by mutableIntStateOf(0)
 
-    val position: Position get() = moves.fold(Position.START) { p, m -> p.play(m) }
+    /**
+     * How many moves are on the board. Everything after it stays part of the variant, so the line
+     * can be walked through without losing it; only playing a different move there cuts it off.
+     */
+    var cursor by mutableIntStateOf(if (fromStart) 0 else moves.size)
+
+    /** The moves up to [cursor], i.e. the ones on the board. */
+    val shown: List<Move> get() = moves.take(cursor)
+
+    val atEnd: Boolean get() = cursor >= moves.size
+
+    /** Position shown on the board. */
+    val position: Position get() = shown.fold(Position.START) { p, m -> p.play(m) }
+
+    /** Position the whole line leads to, the one that is trained. */
+    val target: Position get() = moves.fold(Position.START) { p, m -> p.play(m) }
+
+    /** Start position followed by the position after each move. */
+    val positions: List<Position> get() = moves.runningFold(Position.START) { p, m -> p.play(m) }
 }
 
 class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
@@ -128,18 +155,50 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         )
     }
 
-    fun editVariant(v: Variant) {
-        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory)
+    /** Opens a saved variant; [fromStart] puts the board at move zero to step through the line. */
+    fun editVariant(v: Variant, fromStart: Boolean = false) {
+        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart)
     }
 
+    /**
+     * A move on the board. At the end of the line it is appended; in the middle, the same move just
+     * walks on, and a different one replaces the rest of the line from here.
+     */
     fun editorPlay(move: Move) {
         val e = editor ?: return
-        e.moves = e.moves + move
+        if (e.moves.getOrNull(e.cursor) != move) e.moves = e.shown + move
+        e.cursor++
     }
 
+    /** Puts the board [index] moves into the line; the moves themselves stay. */
+    fun editorGoTo(index: Int) {
+        val e = editor ?: return
+        e.cursor = index.coerceIn(0, e.moves.size)
+    }
+
+    fun editorStepBack() = editorGoTo((editor?.cursor ?: 0) - 1)
+
+    fun editorStepForward() = editorGoTo((editor?.cursor ?: 0) + 1)
+
+    fun editorToEnd() = editorGoTo(editor?.moves?.size ?: 0)
+
+    /** Throws away the moves after the board's position. */
+    fun editorTruncate() {
+        val e = editor ?: return
+        e.moves = e.shown
+    }
+
+    /** Takes back the last move of the line. */
     fun editorUndo() {
         val e = editor ?: return
         e.moves = e.moves.dropLast(1)
+        e.cursor = e.cursor.coerceAtMost(e.moves.size)
+    }
+
+    fun editorClear() {
+        val e = editor ?: return
+        e.moves = emptyList()
+        e.cursor = 0
     }
 
     /** Opens the theory field and puts the cursor into it, or closes it again. */
@@ -155,8 +214,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val t = e.theory
         val sel = t.selection
         val inner = if (sel.collapsed) {
-            val last = e.moves.lastOrNull() ?: return
-            e.moves.dropLast(1).fold(Position.START) { p, m -> p.play(m) }.san(last)
+            val last = e.shown.lastOrNull() ?: return
+            e.shown.dropLast(1).fold(Position.START) { p, m -> p.play(m) }.san(last)
         } else {
             t.text.substring(sel.min, sel.max)
         }
@@ -169,9 +228,18 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     fun editorDuplicate(): String? {
         val e = editor ?: return null
         if (e.moves.isEmpty()) return null
-        val key = e.position.key
+        val key = e.target.key
         return library.variants.firstOrNull { it.id != e.editingId && it.moves.isNotEmpty() && it.target.key == key }
             ?.let(QuizBuilder::title)
+    }
+
+    /** Editing a variant that is already being learned, with moves that no longer match it. */
+    fun editorRestartsProgress(): Boolean {
+        val e = editor ?: return false
+        val id = e.editingId ?: return false
+        if (!progress.cards.containsKey(id)) return false
+        val old = library.variants.firstOrNull { it.id == id } ?: return false
+        return old.moves != e.moves.map { it.uci }
     }
 
     fun saveEditor() {

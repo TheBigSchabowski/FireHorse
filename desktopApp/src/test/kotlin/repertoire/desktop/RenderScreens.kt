@@ -71,6 +71,11 @@ fun main() {
         vm.sample()
         vm.newVariant(vm.library.variants.first())
     }
+    render("editor-durchgehen") { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.last(), fromStart = true)
+        repeat(5) { vm.editorStepForward() }
+    }
     val theory = "Gegen den Aufbau mit f3 und g4 spielt Schwarz ((e6)).\nWenn Weiß g4 zieht, dann ((Nfd7|Sfd7::Springer)) und später ((b5))."
     render("editor-theory") { vm ->
         vm.sample()
