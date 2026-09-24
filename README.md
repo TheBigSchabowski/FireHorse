@@ -34,6 +34,10 @@ installieren“ erlauben.
   letzten zurück. Geänderte Züge sind ein neues Puzzle: der Lernstand fängt von vorn an.
 - **Lernen:** fällige und neue Varianten (Spaced Repetition, FSRS). **Frei üben:** alle gemischt,
   ohne Wertung. **Üben** an einer Variante: nur diese.
+- **Auf dem Brett zeichnen (wie bei lichess):** ein Feld lange gedrückt halten und auf ein anderes
+  ziehen malt einen Pfeil, loslassen auf demselben Feld kreist es ein; am Mac geht auch die rechte
+  Maustaste. Derselbe Pfeil nochmal nimmt ihn wieder weg, und mit dem nächsten Zug oder der
+  nächsten Berührung des Bretts ist alles wieder sauber. Gilt im Editor wie beim Üben.
 - Während eines Puzzles: **Zielstellung zeigen** als Hilfe, **↺ Nochmal von vorn**. Ein Zug aus
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.
