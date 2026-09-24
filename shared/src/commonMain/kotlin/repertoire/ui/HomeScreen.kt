@@ -131,6 +131,7 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
                     TextButton(onClick = { vm.unsuspend(v.id) }) { Text("Wieder abfragen") }
                 }
                 TextButton(onClick = { vm.practice(v.id) }) { Text("Üben") }
+                TextButton(onClick = { vm.editVariant(v, fromStart = true) }) { Text("Durchgehen") }
                 TextButton(onClick = { vm.newVariant(template = v) }) { Text("Weiterführen") }
                 TextButton(onClick = { vm.editVariant(v) }) { Text("Bearbeiten") }
                 if (confirmDelete) {

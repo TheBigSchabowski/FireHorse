@@ -1,5 +1,6 @@
 package repertoire.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -21,13 +22,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.withTimeoutOrNull
 import repertoire.core.Move
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -54,6 +61,10 @@ private val SELECTED = Color(0x9982A55A)
 private val RIGHT = Color(0x9955C255)
 private val WRONG = Color(0x99E04A4A)
 private val TARGET_DOT = Color(0x40000000)
+private val MARK = Color(0xCC15781B)
+
+/** Something drawn on the board: a circle around a square when [from] == [to], else an arrow. */
+private data class BoardMark(val from: Int, val to: Int)
 
 /** cburnett pieces (lichess), pre-rendered to PNG because Android cannot draw SVG resources. */
 private val PIECES: Map<Char, DrawableResource> = mapOf(
@@ -69,6 +80,10 @@ private fun piecePainter(piece: Char): Painter = painterResource(PIECES.getValue
 /**
  * Interactive board. Moves are made by clicking a piece and then its target, or by dragging.
  * Only the side to move can be moved, and only legally; promotions become a queen.
+ *
+ * Holding a square (or the right mouse button) draws on the board like on lichess: dragging to
+ * another square makes an arrow, letting go on the same square circles it. The same mark drawn
+ * twice disappears again, as does everything once a move is played or the board is touched.
  */
 @Composable
 fun ChessBoard(
@@ -83,6 +98,9 @@ fun ChessBoard(
     var selected by remember(position) { mutableStateOf<Int?>(null) }
     var dragFrom by remember(position) { mutableStateOf<Int?>(null) }
     var dragPos by remember { mutableStateOf(Offset.Zero) }
+    // Drawn marks belong to the position they were drawn in, so a move wipes the board clean.
+    var drawn by remember(position) { mutableStateOf(emptyList<BoardMark>()) }
+    var drawing by remember(position) { mutableStateOf<BoardMark?>(null) }
 
     fun movesFrom(sq: Int) = position.legalMoves().filter { it.from == sq }
 
@@ -118,20 +136,80 @@ fun ChessBoard(
 
         Box(
             Modifier.size(squareDp * 8).pointerInput(position, interactive, whiteBottom, squarePx) {
-                if (!interactive) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val sq = squareOf(down.position) ?: return@awaitEachGesture
+
+                    /** Follows the pointer until it is lifted and keeps the mark it drew. */
+                    suspend fun AwaitPointerEventScope.drawMark() {
+                        selected = null
+                        dragFrom = null
+                        var to = sq
+                        drawing = BoardMark(sq, sq)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.first()
+                            squareOf(change.position)?.let { to = it }
+                            drawing = BoardMark(sq, to)
+                            change.consume()
+                            if (!change.pressed) break
+                        }
+                        drawing = null
+                        val mark = BoardMark(sq, to)
+                        drawn = if (mark in drawn) drawn - mark else drawn + mark
+                    }
+
+                    // Right mouse button: straight to drawing, as on lichess.
+                    if (currentEvent.buttons.isSecondaryPressed) {
+                        drawMark()
+                        return@awaitEachGesture
+                    }
+
                     val current = selected
-                    if (current != null && current != sq && tryMove(current, sq)) return@awaitEachGesture
+                    if (interactive && current != null && current != sq && tryMove(current, sq)) return@awaitEachGesture
                     val piece = position.pieceAt(sq)
-                    if (piece == null || piece.isUpperCase() != position.whiteToMove) {
+                    val movable = interactive && piece != null && piece.isUpperCase() == position.whiteToMove
+                    if (movable) selected = sq
+
+                    // Held on the same square long enough? Then this is a mark and not a move.
+                    // The piece is only picked up once the finger really moves, so holding it
+                    // still to draw does not drag it around first.
+                    var release: Offset? = null
+                    val heldDown = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull
+                            if (!change.pressed) {
+                                release = change.position
+                                return@withTimeoutOrNull
+                            }
+                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                                if (movable) {
+                                    dragFrom = sq
+                                    dragPos = change.position
+                                }
+                                change.consume()
+                                return@withTimeoutOrNull
+                            }
+                        }
+                    } == null
+                    if (heldDown) {
+                        drawMark()
+                        return@awaitEachGesture
+                    }
+
+                    drawn = emptyList()
+                    if (!movable) {
                         selected = null
                         return@awaitEachGesture
                     }
-                    selected = sq
-                    dragFrom = sq
-                    dragPos = down.position
+                    val lifted = release
+                    if (lifted != null) {
+                        // A short tap: the piece stays selected, a tap on the target follows.
+                        dragFrom = null
+                        squareOf(lifted)?.takeIf { it != sq }?.let { tryMove(sq, it) }
+                        return@awaitEachGesture
+                    }
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.first()
@@ -141,7 +219,7 @@ fun ChessBoard(
                             if (target != null && target != sq) tryMove(sq, target)
                             break
                         }
-                        dragPos += change.positionChange()
+                        dragPos = change.position
                         change.consume()
                     }
                 }
@@ -194,6 +272,13 @@ fun ChessBoard(
                 }
             }
 
+            if (drawn.isNotEmpty() || drawing != null) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val centre = { sq: Int -> topLeft(sq) + Offset(squarePx / 2, squarePx / 2) }
+                    for (mark in drawn + listOfNotNull(drawing)) drawMark(mark, centre, squarePx)
+                }
+            }
+
             val dragging = dragFrom
             val draggedPiece = dragging?.let { position.pieceAt(it) }
             if (draggedPiece != null) {
@@ -206,4 +291,30 @@ fun ChessBoard(
             }
         }
     }
+}
+
+/** One arrow or circle in lichess green. */
+private fun DrawScope.drawMark(mark: BoardMark, centre: (Int) -> Offset, square: Float) {
+    val from = centre(mark.from)
+    if (mark.from == mark.to) {
+        drawCircle(MARK, radius = square * 0.45f, center = from, style = Stroke(width = square * 0.08f))
+        return
+    }
+    val to = centre(mark.to)
+    val direction = (to - from) / (to - from).getDistance()
+    val head = square * 0.4f
+    // The shaft starts outside the piece it comes from and stops where the head begins.
+    val shaftStart = from + direction * (square * 0.25f)
+    val shaftEnd = to - direction * head
+    drawLine(MARK, shaftStart, shaftEnd, strokeWidth = square * 0.16f, cap = StrokeCap.Round)
+    val side = Offset(-direction.y, direction.x) * (head * 0.45f)
+    drawPath(
+        Path().apply {
+            moveTo(to.x, to.y)
+            lineTo(shaftEnd.x + side.x, shaftEnd.y + side.y)
+            lineTo(shaftEnd.x - side.x, shaftEnd.y - side.y)
+            close()
+        },
+        MARK,
+    )
 }

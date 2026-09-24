@@ -16,8 +16,11 @@ dependencies {
 }
 
 // jpackage lives in a full JDK; the JDK 21 that Gradle provisions may be a JBR without it.
+// Only macOS has java_home (and only there is the DMG built); elsewhere Gradle's own JVM does.
 fun systemJdk(): String {
-    val process = ProcessBuilder("/usr/libexec/java_home").start()
+    val javaHome = File("/usr/libexec/java_home")
+    if (!javaHome.canExecute()) return System.getProperty("java.home")
+    val process = ProcessBuilder(javaHome.path).start()
     return process.inputStream.bufferedReader().readText().trim().also { process.waitFor() }
 }
 

@@ -27,8 +27,17 @@ installieren“ erlauben.
 
 - **+ Neue Variante:** Züge spielen, Namen geben, speichern. „Weiterführen“ bei einer vorhandenen
   Variante übernimmt ihre Züge, dann hängst du nur noch an, was anders ist.
+- **Durchgehen:** öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶|, den Pfeiltasten ← → oder einem Klick
+  auf einen Zug in der Liste gehst du die Züge durch — nichts wird dabei gelöscht.
+- **Bearbeiten:** dasselbe Brett, nur gleich bei der Endstellung. Ein Zug mitten in der Variante
+  ersetzt ab dort den Rest, „Ab hier kürzen“ wirft ihn ohne Ersatz weg, „Zug zurück“ nimmt den
+  letzten zurück. Geänderte Züge sind ein neues Puzzle: der Lernstand fängt von vorn an.
 - **Lernen:** fällige und neue Varianten (Spaced Repetition, FSRS). **Frei üben:** alle gemischt,
   ohne Wertung. **Üben** an einer Variante: nur diese.
+- **Auf dem Brett zeichnen (wie bei lichess):** ein Feld lange gedrückt halten und auf ein anderes
+  ziehen malt einen Pfeil, loslassen auf demselben Feld kreist es ein; am Mac geht auch die rechte
+  Maustaste. Derselbe Pfeil nochmal nimmt ihn wieder weg, und mit dem nächsten Zug oder der
+  nächsten Berührung des Bretts ist alles wieder sauber. Gilt im Editor wie beim Üben.
 - Während eines Puzzles: **Zielstellung zeigen** als Hilfe, **↺ Nochmal von vorn**. Ein Zug aus
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.

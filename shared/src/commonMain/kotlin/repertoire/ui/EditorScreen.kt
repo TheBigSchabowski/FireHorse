@@ -1,7 +1,11 @@
 package repertoire.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -35,10 +40,9 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import repertoire.core.Cloze
-import repertoire.core.Position
-import repertoire.core.compactMoves
 import repertoire.core.numberedSan
 
 @Composable
@@ -55,7 +59,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 ChessBoard(
                     position = position,
                     whiteBottom = e.playWhite,
-                    lastMove = e.moves.lastOrNull(),
+                    lastMove = e.shown.lastOrNull(),
                     marks = emptyMap(),
                     interactive = true,
                     onMove = vm::editorPlay,
@@ -76,21 +80,31 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                "Spiele auf dem Brett die Züge vom Start bis zur Stellung (beide Seiten).",
+                if (e.atEnd) {
+                    "Spiele auf dem Brett die Züge vom Start bis zur Stellung (beide Seiten)."
+                } else {
+                    "Zug ${e.cursor} von ${e.moves.size}. Ein anderer Zug auf dem Brett ersetzt ab hier den Rest."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            val numbered = e.moves.runningFold(Position.START) { p, m -> p.play(m) }
-                .zip(e.moves) { before, move -> numberedSan(before, move) }
-            Text(
-                compactMoves(numbered).ifEmpty { "Noch keine Züge" },
-                style = MaterialTheme.typography.bodyLarge,
-            )
+            MoveList(vm, e)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { vm.editorGoTo(0) }, enabled = e.cursor > 0) { Text("|◀") }
+                OutlinedButton(onClick = vm::editorStepBack, enabled = e.cursor > 0) { Text("◀") }
+                OutlinedButton(onClick = vm::editorStepForward, enabled = !e.atEnd) { Text("▶") }
+                OutlinedButton(onClick = vm::editorToEnd, enabled = !e.atEnd) { Text("▶|") }
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = vm::editorUndo, enabled = e.moves.isNotEmpty()) { Text("Zug zurück") }
-                OutlinedButton(onClick = { e.moves = emptyList() }, enabled = e.moves.isNotEmpty()) { Text("Von vorn") }
+                if (e.atEnd) {
+                    OutlinedButton(onClick = vm::editorUndo, enabled = e.moves.isNotEmpty()) { Text("Zug zurück") }
+                } else {
+                    OutlinedButton(onClick = vm::editorTruncate) { Text("Ab hier kürzen") }
+                }
+                OutlinedButton(onClick = vm::editorClear, enabled = e.moves.isNotEmpty()) { Text("Alle löschen") }
             }
             Spacer(Modifier.height(12.dp))
             TheoryEditor(vm, e)
@@ -105,6 +119,14 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 Spacer(Modifier.height(12.dp))
                 Text("Diese Stellung ist schon gespeichert als „$it“.", color = Color(0xFFFFB74D))
             }
+            if (vm.editorRestartsProgress()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Geänderte Züge sind ein neues Puzzle: der Lernstand dieser Variante fängt beim Speichern von vorn an.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = vm::saveEditor, enabled = e.name.isNotBlank() && e.moves.isNotEmpty()) { Text("Speichern") }
@@ -112,6 +134,49 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             }
         }
     }
+}
+
+/**
+ * Every move of the variant, clickable: the board jumps to that point without losing what comes
+ * after it. The move on the board is highlighted.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MoveList(vm: AppViewModel, e: EditorState) {
+    if (e.moves.isEmpty()) {
+        Text("Noch keine Züge", style = MaterialTheme.typography.bodyLarge)
+        return
+    }
+    val positions = e.positions
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        MoveChip("Start", e.cursor == 0) { vm.editorGoTo(0) }
+        e.moves.forEachIndexed { i, move ->
+            val before = positions[i]
+            // "1. e4" for White, the bare move for Black, as in a game score.
+            val label = if (before.whiteToMove) numberedSan(before, move) else before.san(move)
+            MoveChip(label, e.cursor == i + 1) { vm.editorGoTo(i + 1) }
+        }
+    }
+}
+
+@Composable
+private fun MoveChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                RoundedCornerShape(6.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 /** Free text about the variant; "((…))" turns a part into a gap that training asks for. */
@@ -137,7 +202,7 @@ private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
         },
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = vm::theoryGap, enabled = !e.theory.selection.collapsed || e.moves.isNotEmpty()) {
+        TextButton(onClick = vm::theoryGap, enabled = !e.theory.selection.collapsed || e.shown.isNotEmpty()) {
             Text(if (e.theory.selection.collapsed) "Lücke: letzter Zug" else "Auswahl → Lücke")
         }
         val gaps = Cloze.gaps(e.theory.text).size
