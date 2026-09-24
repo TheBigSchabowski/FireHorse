@@ -20,10 +20,23 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import repertoire.core.Cloze
 import repertoire.core.Position
 import repertoire.core.compactMoves
 import repertoire.core.numberedSan
@@ -80,6 +93,8 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 OutlinedButton(onClick = { e.moves = emptyList() }, enabled = e.moves.isNotEmpty()) { Text("Von vorn") }
             }
             Spacer(Modifier.height(12.dp))
+            TheoryEditor(vm, e)
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Ich spiele:", modifier = Modifier.padding(end = 8.dp))
                 FilterChip(selected = e.playWhite, onClick = { e.playWhite = true }, label = { Text("Weiß") })
@@ -97,4 +112,45 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             }
         }
     }
+}
+
+/** Free text about the variant; "((…))" turns a part into a gap that training asks for. */
+@Composable
+private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
+    TextButton(onClick = vm::toggleTheory) {
+        Text(if (e.showTheory) "Theorie ausblenden" else "✎ Theorie (Cmd/Strg+T)")
+    }
+    if (!e.showTheory) return
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(e.focusTheory) { if (e.focusTheory > 0) focus.requestFocus() }
+    OutlinedTextField(
+        e.theory, { e.theory = it },
+        label = { Text("Theorie") },
+        placeholder = { Text("Wenn Weiß g4 spielt, dann ((Nfd7)).") },
+        minLines = 4,
+        modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+            // Cmd/Ctrl+Shift+C as in Anki: make a gap.
+            val gapKey = it.type == KeyEventType.KeyDown && it.key == Key.C && it.isShiftPressed &&
+                (it.isMetaPressed || it.isCtrlPressed)
+            if (gapKey) vm.theoryGap()
+            gapKey
+        },
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = vm::theoryGap, enabled = !e.theory.selection.collapsed || e.moves.isNotEmpty()) {
+            Text(if (e.theory.selection.collapsed) "Lücke: letzter Zug" else "Auswahl → Lücke")
+        }
+        val gaps = Cloze.gaps(e.theory.text).size
+        Text(
+            if (gaps == 0) "Keine Lücken – wird nach dem Lösen nur angezeigt." else "$gaps Lücke(n) zum Ausfüllen",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Text(
+        "((Antwort)) wird abgefragt, ((Nb6|Sb6)) erlaubt beides, ((Nb6::Springer)) zeigt einen Tipp. " +
+            "Cmd/Strg+Shift+C macht die Auswahl zur Lücke.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

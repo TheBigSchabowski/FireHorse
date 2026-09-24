@@ -23,3 +23,12 @@ expect fun isoDate(epochMillis: Long): String
 expect fun shortDate(epochMillis: Long): String
 
 expect fun newId(): String
+
+/** The system's save / open dialogs, for exporting and importing the library. */
+interface FilePicker {
+    /** Asks where to save [text]; [onDone] gets the chosen file's name, or null if cancelled. */
+    fun save(suggestedName: String, text: String, onDone: (String?) -> Unit)
+
+    /** Asks for a file; [onDone] gets its content, or null if cancelled. */
+    fun open(onDone: (String?) -> Unit)
+}

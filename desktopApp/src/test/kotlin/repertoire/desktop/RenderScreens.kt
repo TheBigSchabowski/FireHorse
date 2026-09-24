@@ -71,5 +71,30 @@ fun main() {
         vm.sample()
         vm.newVariant(vm.library.variants.first())
     }
+    val theory = "Gegen den Aufbau mit f3 und g4 spielt Schwarz ((e6)).\nWenn Weiß g4 zieht, dann ((Nfd7|Sfd7::Springer)) und später ((b5))."
+    render("editor-theory") { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.last())
+        vm.editor!!.theory = androidx.compose.ui.text.input.TextFieldValue(theory)
+        vm.toggleTheory()
+    }
+    fun AppViewModel.solveWithTheory() {
+        sample()
+        editVariant(library.variants.last())
+        editor!!.theory = androidx.compose.ui.text.input.TextFieldValue(theory)
+        saveEditor()
+        practice(library.variants.last().id)
+        var p = Position.START
+        for (san in "e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 f3 e6".split(" ")) {
+            val move = p.parseSan(san)!!
+            submitMove(move)
+            p = p.play(move)
+        }
+        setGapInput(0, "e6")
+        setGapInput(1, "Sfd7")
+        setGapInput(2, "b4")
+    }
+    render("theory-quiz") { it.solveWithTheory() }
+    render("theory-checked") { vm -> vm.solveWithTheory(); vm.checkGaps() }
     println("Screens in ${out.absolutePath}")
 }

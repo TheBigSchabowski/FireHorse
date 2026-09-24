@@ -4,8 +4,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import repertoire.core.Cloze
+import repertoire.core.Exchange
+import repertoire.core.FilePicker
 import repertoire.core.Fsrs
 import repertoire.core.Grade
+import repertoire.core.TheoryPart
 import repertoire.core.Library
 import repertoire.core.Move
 import repertoire.core.Outcome
@@ -43,19 +49,37 @@ class TrainingSession(
 
     /** Mistakes from earlier tries of the current puzzle, so restarting does not hide them from grading. */
     var earlierMistakes by mutableIntStateOf(0)
+
+    /** What has been typed into the theory gaps of the current puzzle, by gap index. */
+    var gapInputs by mutableStateOf<List<String>>(emptyList())
+
+    /** Gap index → answered right, once "Prüfen" was pressed; null before. */
+    var gapResults by mutableStateOf<List<Boolean>?>(null)
+
+    val gaps: List<TheoryPart.Gap> get() = attempt?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
+
+    /** The position is reached and every gap is checked: ready to be graded. */
+    val done: Boolean get() = attempt?.finished == true && (gapResults != null || gaps.isEmpty())
 }
 
 /** A variant being entered: play the moves, then name it. */
-class EditorState(val editingId: String?, opening: String, name: String, moves: List<Move>, playWhite: Boolean) {
+class EditorState(val editingId: String?, opening: String, name: String, moves: List<Move>, playWhite: Boolean, theory: String = "") {
     var opening by mutableStateOf(opening)
     var name by mutableStateOf(name)
     var moves by mutableStateOf(moves)
     var playWhite by mutableStateOf(playWhite)
+    var theory by mutableStateOf(TextFieldValue(theory))
+
+    /** The theory field is open (Cmd/Ctrl+T). */
+    var showTheory by mutableStateOf(theory.isNotBlank())
+
+    /** Bumped to move the keyboard focus into the theory field. */
+    var focusTheory by mutableIntStateOf(0)
 
     val position: Position get() = moves.fold(Position.START) { p, m -> p.play(m) }
 }
 
-class AppViewModel(private val store: Store) {
+class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
     var library by mutableStateOf(store.loadLibrary())
         private set
     var progress by mutableStateOf(store.loadProgress())
@@ -66,6 +90,11 @@ class AppViewModel(private val store: Store) {
         private set
 
     val dataLocation: String get() = store.location
+
+    /** Result of the last export or import, shown on the home screen. */
+    var message by mutableStateOf<String?>(null)
+
+    val canTransfer: Boolean get() = files != null
 
     private val quizzes: List<Quiz> get() = QuizBuilder.build(library.variants)
 
@@ -100,7 +129,7 @@ class AppViewModel(private val store: Store) {
     }
 
     fun editVariant(v: Variant) {
-        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite)
+        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory)
     }
 
     fun editorPlay(move: Move) {
@@ -111,6 +140,29 @@ class AppViewModel(private val store: Store) {
     fun editorUndo() {
         val e = editor ?: return
         e.moves = e.moves.dropLast(1)
+    }
+
+    /** Opens the theory field and puts the cursor into it, or closes it again. */
+    fun toggleTheory() {
+        val e = editor ?: return
+        e.showTheory = !e.showTheory
+        if (e.showTheory) e.focusTheory++
+    }
+
+    /** Wraps the selected text in "((…))"; without a selection, inserts the last move as a gap. */
+    fun theoryGap() {
+        val e = editor ?: return
+        val t = e.theory
+        val sel = t.selection
+        val inner = if (sel.collapsed) {
+            val last = e.moves.lastOrNull() ?: return
+            e.moves.dropLast(1).fold(Position.START) { p, m -> p.play(m) }.san(last)
+        } else {
+            t.text.substring(sel.min, sel.max)
+        }
+        val gap = "(($inner))"
+        val text = t.text.substring(0, sel.min) + gap + t.text.substring(sel.max)
+        e.theory = TextFieldValue(text, TextRange(sel.min + gap.length))
     }
 
     /** Title of another saved variant that already ends in the editor's position. */
@@ -126,7 +178,7 @@ class AppViewModel(private val store: Store) {
         val e = editor ?: return
         if (e.name.isBlank() || e.moves.isEmpty()) return
         val id = e.editingId ?: newId()
-        val variant = Variant(id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite)
+        val variant = Variant(id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite, e.theory.text.trim())
         val old = library.variants.firstOrNull { it.id == id }
         updateLibrary { lib ->
             lib.copy(variants = if (old != null) lib.variants.map { if (it.id == id) variant else it } else lib.variants + variant)
@@ -180,6 +232,8 @@ class AppViewModel(private val store: Store) {
         s.marks = emptyMap()
         s.showTarget = false
         s.earlierMistakes = 0
+        s.gapInputs = List(s.gaps.size) { "" }
+        s.gapResults = null
         s.revision++
     }
 
@@ -189,6 +243,8 @@ class AppViewModel(private val store: Store) {
         val attempt = s.attempt ?: return
         s.earlierMistakes += attempt.mistakes
         s.attempt = QuizAttempt(attempt.quiz)
+        s.gapInputs = List(s.gaps.size) { "" }
+        s.gapResults = null
         s.feedback = null
         s.marks = emptyMap()
         s.revision++
@@ -232,12 +288,40 @@ class AppViewModel(private val store: Store) {
         session?.let { it.showTarget = !it.showTarget }
     }
 
+    fun setGapInput(index: Int, text: String) {
+        val s = session ?: return
+        if (s.gapResults == null) s.gapInputs = s.gapInputs.toMutableList().also { it[index] = text }
+    }
+
+    fun checkGaps() {
+        val s = session ?: return
+        if (s.attempt?.finished != true || s.gapResults != null) return
+        val results = s.gaps.map { Cloze.isCorrect(s.gapInputs[it.index], it) }
+        s.gapResults = results
+        val right = results.count { it }
+        s.feedback = when {
+            right == results.size && (s.attempt?.mistakes ?: 0) + s.earlierMistakes == 0 -> Feedback("Alles richtig!", FeedbackTone.GOOD)
+            right == results.size -> Feedback("Alle Lücken richtig.", FeedbackTone.INFO)
+            else -> Feedback("$right von ${results.size} Lücken richtig.", FeedbackTone.BAD)
+        }
+    }
+
+    /** Enter: check the gaps first, then grade. */
+    fun confirm() {
+        val s = session ?: return
+        if (s.done) grade() else checkGaps()
+    }
+
+    /** Mistakes on the board (all tries) plus wrong gaps. */
+    fun mistakes(s: TrainingSession): Int =
+        (s.attempt?.mistakes ?: 0) + s.earlierMistakes + (s.gapResults?.count { !it } ?: 0)
+
     /** Finishes the current puzzle. Without an explicit grade, a clean solve counts as GOOD, a mistake as AGAIN. */
     fun grade(grade: Grade? = null) {
         val s = session ?: return
         val attempt = s.attempt ?: return
-        if (!attempt.finished) return
-        val mistakes = attempt.mistakes + s.earlierMistakes
+        if (!s.done) return
+        val mistakes = mistakes(s)
         val g = if (mistakes > 0) Grade.AGAIN else grade ?: Grade.GOOD
         if (s.graded) {
             val id = attempt.quiz.variant.id
@@ -268,4 +352,35 @@ class AppViewModel(private val store: Store) {
         s.queue.removeAll { it.variant.id == id }
         nextQuiz(s)
     }
+
+    // ---- Export / import -----------------------------------------------------------------
+
+    /** Saves [opening]'s variants (all if null), with their learning state, as a JSON file. */
+    fun export(opening: String? = null) {
+        val picker = files ?: return
+        val variants = library.variants.filter { opening == null || it.opening.ifBlank { "Ohne Eröffnung" } == opening }
+        val name = "eroeffnungen-" + (opening?.let(::fileSafe) ?: "alle") + ".json"
+        picker.save(name, Exchange.export(variants, progress)) { file ->
+            if (file != null) message = "${variants.size} Variante(n) exportiert: $file"
+        }
+    }
+
+    /** Adds the variants of an exported file; same id means the same variant, which is replaced. */
+    fun import() {
+        val picker = files ?: return
+        picker.open { text ->
+            if (text == null) return@open
+            message = try {
+                val result = Exchange.import(text, library, progress)
+                updateLibrary { result.library }
+                saveProgress(result.progress)
+                "Importiert: " + result.summary()
+            } catch (e: IllegalArgumentException) {
+                "Import fehlgeschlagen: ${e.message}"
+            }
+        }
+    }
+
+    private fun fileSafe(s: String) =
+        s.lowercase().replace(Regex("[^a-z0-9äöüß]+"), "-").trim('-').ifEmpty { "eroeffnung" }
 }

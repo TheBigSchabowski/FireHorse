@@ -59,7 +59,10 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
         val groups = vm.library.variants.groupBy { it.opening.ifBlank { "Ohne Eröffnung" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
         for ((opening, variants) in groups) {
-            Text(opening, style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(opening, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                if (vm.canTransfer) TextButton(onClick = { vm.export(opening) }) { Text("Exportieren") }
+            }
             Spacer(Modifier.height(8.dp))
             for (v in variants) {
                 VariantRow(vm, v)
@@ -75,6 +78,19 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             OutlinedButton(onClick = { vm.setNewPerDay(vm.library.settings.newPerDay - 5) }) { Text("−5") }
             Text("${vm.library.settings.newPerDay}", modifier = Modifier.padding(horizontal = 16.dp))
             OutlinedButton(onClick = { vm.setNewPerDay(vm.library.settings.newPerDay + 5) }) { Text("+5") }
+        }
+        if (vm.canTransfer) {
+            Spacer(Modifier.height(20.dp))
+            Text("Varianten und Lernstand übertragen")
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { vm.export() }, enabled = vm.library.variants.isNotEmpty()) { Text("Alle exportieren") }
+                OutlinedButton(onClick = vm::import) { Text("Importieren") }
+            }
+            vm.message?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, style = MaterialTheme.typography.bodyMedium)
+            }
         }
         Spacer(Modifier.height(12.dp))
         Text(

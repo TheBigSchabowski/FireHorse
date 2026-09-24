@@ -14,6 +14,8 @@ data class Variant(
     val moves: List<String>,
     /** Board orientation while training this variant. */
     val playWhite: Boolean = true,
+    /** Notes shown after the position is reached; "((Nb6))" marks a gap to fill in, see [Cloze]. */
+    val theory: String = "",
 ) {
     /** Start position followed by the position after each move. */
     val positions: List<Position> by lazy {

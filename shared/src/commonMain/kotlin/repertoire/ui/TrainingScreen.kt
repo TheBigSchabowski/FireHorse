@@ -1,6 +1,12 @@
 package repertoire.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,12 +28,27 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import repertoire.core.Cloze
 import repertoire.core.Grade
+import repertoire.core.TheoryPart
 import repertoire.core.compactMoves
 
 private val GOOD_COLOR = Color(0xFF7BC67B)
@@ -114,8 +135,14 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                         .padding(12.dp),
                 )
+                if (variant.theory.isNotBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    TheoryQuiz(vm, session, variant.theory)
+                }
                 Spacer(Modifier.height(16.dp))
-                if (session.graded && attempt.mistakes + session.earlierMistakes == 0) {
+                if (!session.done) {
+                    Button(onClick = vm::checkGaps) { Text("Prüfen ⏎") }
+                } else if (session.graded && vm.mistakes(session) == 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { vm.grade(Grade.HARD) }) { Text("Schwer") }
                         Button(onClick = { vm.grade(Grade.GOOD) }) { Text("Gut ⏎") }
@@ -145,6 +172,105 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
             OutlinedButton(onClick = vm::restartCurrent, enabled = attempt.played.isNotEmpty()) { Text("↺ Nochmal von vorn") }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = vm::suspendCurrent) { Text("Variante nicht mehr abfragen") }
+        }
+    }
+}
+
+private sealed interface Piece {
+    data class Word(val text: String) : Piece
+    /** [suffix]: punctuation right after the gap, kept on the same line as it. */
+    data class Blank(val gap: TheoryPart.Gap, val suffix: String = "") : Piece
+}
+
+/** The theory text line by line, cut into words so gaps can sit inside the flowing text. */
+private fun lines(theory: String): List<List<Piece>> {
+    val lines = mutableListOf(mutableListOf<Piece>())
+    for (part in Cloze.parse(theory)) {
+        when (part) {
+            is TheoryPart.Gap -> lines.last() += Piece.Blank(part)
+            is TheoryPart.Text -> part.text.split("\n").forEachIndexed { i, chunk ->
+                if (i > 0) lines += mutableListOf<Piece>()
+                val words = chunk.split(" ").toMutableList()
+                val previous = lines.last().lastOrNull()
+                if (i == 0 && previous is Piece.Blank && words.first().isNotEmpty()) {
+                    lines.last()[lines.last().lastIndex] = previous.copy(suffix = words.removeAt(0))
+                }
+                words.filter(String::isNotEmpty).forEach { lines.last() += Piece.Word(it) }
+            }
+        }
+    }
+    return lines
+}
+
+/** Fill in the blanks: every "((…))" of the theory becomes a small text field. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TheoryQuiz(vm: AppViewModel, session: TrainingSession, theory: String) {
+    val lines = remember(theory) { lines(theory) }
+    val gapCount = remember(theory) { Cloze.gaps(theory).size }
+    val focusers = remember(theory) { List(gapCount) { FocusRequester() } }
+    val focusManager = LocalFocusManager.current
+    val results = session.gapResults
+    LaunchedEffect(session.attempt) { focusers.firstOrNull()?.requestFocus() }
+
+    Column(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+    ) {
+        for (line in lines) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (piece in line) when (piece) {
+                    is Piece.Word -> Text(piece.text, style = MaterialTheme.typography.bodyMedium)
+                    is Piece.Blank -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        val gap = piece.gap
+                        val right = results?.get(gap.index)
+                        val color = when (right) {
+                            null -> MaterialTheme.colorScheme.onSurface
+                            true -> GOOD_COLOR
+                            false -> BAD_COLOR
+                        }
+                        val last = gap.index == gapCount - 1
+                        val chars = maxOf(gap.answer.length, gap.hint?.length ?: 0, 3)
+                        BasicTextField(
+                            value = session.gapInputs.getOrElse(gap.index) { "" },
+                            onValueChange = { vm.setGapInput(gap.index, it) },
+                            readOnly = results != null,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = color, fontWeight = FontWeight.SemiBold),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions(imeAction = if (last) ImeAction.Done else ImeAction.Next),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Next) },
+                                onDone = { vm.confirm() },
+                            ),
+                            modifier = Modifier.width((chars * 9 + 14).dp)
+                                .focusRequester(focusers[gap.index])
+                                .onPreviewKeyEvent {
+                                    if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (it.key) {
+                                        Key.Enter, Key.NumPadEnter -> vm.confirm().let { true }
+                                        Key.Tab -> focusManager.moveFocus(FocusDirection.Next).let { true }
+                                        else -> false
+                                    }
+                                },
+                            decorationBox = { field ->
+                                Box(
+                                    Modifier.border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    if (session.gapInputs.getOrElse(gap.index) { "" }.isEmpty() && gap.hint != null) {
+                                        Text(gap.hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    field()
+                                }
+                            },
+                        )
+                        if (right == false) Text(" → ${gap.answers.joinToString(" / ")}", color = GOOD_COLOR, fontWeight = FontWeight.SemiBold)
+                        if (piece.suffix.isNotEmpty()) Text(piece.suffix, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
         }
     }
 }
