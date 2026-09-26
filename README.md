@@ -33,7 +33,11 @@ installieren“ erlauben.
   ersetzt ab dort den Rest, „Ab hier kürzen“ wirft ihn ohne Ersatz weg, „Zug zurück“ nimmt den
   letzten zurück. Geänderte Züge sind ein neues Puzzle: der Lernstand fängt von vorn an.
 - **Lernen:** fällige und neue Varianten (Spaced Repetition, FSRS). **Frei üben:** alle gemischt,
-  ohne Wertung. **Üben** an einer Variante: nur diese.
+  ohne Wertung. **Üben** an einer Variante: nur diese. **Züge üben:** die Stellungen der
+  Variante gemischt, jeweils nur den nächsten Zug finden.
+- **Theorie** (im Editor, Cmd/Strg+T): `((e6))` wird nach dem Lösen als Lücke abgefragt. `@8. Ng4`
+  wird ein Link, der das Brett nach diesem Zug zeigt. Tipp `8` und Tab für den weißen Zug, nochmal
+  Tab für den schwarzen.
 - **Auf dem Brett zeichnen (wie bei lichess):** ein Feld lange gedrückt halten und auf ein anderes
   ziehen malt einen Pfeil, loslassen auf demselben Feld kreist es ein; am Mac geht auch die rechte
   Maustaste. Derselbe Pfeil nochmal nimmt ihn wieder weg, und mit dem nächsten Zug oder der

@@ -2,6 +2,7 @@ package repertoire.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicTextField
@@ -45,11 +46,17 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import repertoire.core.Cloze
 import repertoire.core.Grade
+import repertoire.core.Move
+import repertoire.core.MoveRefs
+import repertoire.core.TheoryText
+import repertoire.core.Variant
 import repertoire.core.TheoryPart
 import repertoire.core.compactMoves
+import repertoire.core.numberedSan
 
 private val GOOD_COLOR = Color(0xFF7BC67B)
 private val BAD_COLOR = Color(0xFFE57373)
@@ -88,14 +95,15 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
         }
 
         val variant = attempt.quiz.variant
+        val preview = session.preview
         BoardWithPanel(
             board = { modifier ->
                 ChessBoard(
-                    position = attempt.position,
+                    position = preview?.let { variant.positions[it] } ?: attempt.position,
                     whiteBottom = variant.playWhite,
-                    lastMove = attempt.lastMove,
-                    marks = session.marks,
-                    interactive = !attempt.finished,
+                    lastMove = if (preview != null) Move.fromUci(variant.moves[preview - 1]) else attempt.lastMove,
+                    marks = if (preview != null) emptyMap() else session.marks,
+                    interactive = !attempt.finished && preview == null,
                     onMove = vm::submitMove,
                     modifier = modifier,
                 )
@@ -104,7 +112,11 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
         ) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Spiele beide Seiten vom Start, bis diese Stellung auf dem Brett steht.",
+                when {
+                    !attempt.singleMove -> "Spiele beide Seiten vom Start, bis diese Stellung auf dem Brett steht."
+                    variant.positions[attempt.startPly].whiteToMove -> "Finde den nächsten Zug für Weiß."
+                    else -> "Finde den nächsten Zug für Schwarz."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -135,9 +147,20 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                         .padding(12.dp),
                 )
-                if (variant.theory.isNotBlank()) {
+                if (variant.theory.isNotBlank() && !attempt.singleMove) {
                     Spacer(Modifier.height(12.dp))
-                    TheoryQuiz(vm, session, variant.theory)
+                    TheoryQuiz(vm, session, variant)
+                }
+                if (preview != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Brett: nach ${numberedSan(variant.positions[preview - 1], Move.fromUci(variant.moves[preview - 1]))}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = INFO_COLOR,
+                        )
+                        TextButton(onClick = { vm.showPly(null) }) { Text("Zurück zur Stellung") }
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
                 if (!session.done) {
@@ -151,7 +174,7 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                 } else {
                     Button(onClick = { vm.grade() }) { Text("Weiter ⏎") }
                 }
-            } else {
+            } else if (!attempt.singleMove) {
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = vm::toggleTarget) {
                     Text(if (session.showTarget) "Zielstellung ausblenden" else "Zielstellung zeigen (Hilfe)")
@@ -169,7 +192,9 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                 }
             }
             Spacer(Modifier.height(16.dp))
-            OutlinedButton(onClick = vm::restartCurrent, enabled = attempt.played.isNotEmpty()) { Text("↺ Nochmal von vorn") }
+            OutlinedButton(onClick = vm::restartCurrent, enabled = attempt.started) {
+                Text(if (attempt.singleMove) "↺ Nochmal" else "↺ Nochmal von vorn")
+            }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = vm::suspendCurrent) { Text("Variante nicht mehr abfragen") }
         }
@@ -178,24 +203,40 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
 
 private sealed interface Piece {
     data class Word(val text: String) : Piece
+
     /** [suffix]: punctuation right after the gap, kept on the same line as it. */
     data class Blank(val gap: TheoryPart.Gap, val suffix: String = "") : Piece
+
+    /** A "@8. Ng4" marker: click to see the board after that move. */
+    data class Ref(val ref: TheoryText.Ref, val suffix: String = "") : Piece
 }
 
-/** The theory text line by line, cut into words so gaps can sit inside the flowing text. */
-private fun lines(theory: String): List<List<Piece>> {
+/** The theory text line by line, cut into words so gaps and move links can sit inside the flowing text. */
+private fun lines(variant: Variant): List<List<Piece>> {
     val lines = mutableListOf(mutableListOf<Piece>())
-    for (part in Cloze.parse(theory)) {
+    fun addText(text: String) = text.split("\n").forEachIndexed { i, chunk ->
+        if (i > 0) lines += mutableListOf<Piece>()
+        val words = chunk.split(" ").toMutableList()
+        val previous = lines.last().lastOrNull()
+        if (i == 0 && words.first().isNotEmpty()) {
+            val glued = when (previous) {
+                is Piece.Blank -> previous.copy(suffix = words.first())
+                is Piece.Ref -> previous.copy(suffix = words.first())
+                else -> null
+            }
+            if (glued != null) {
+                lines.last()[lines.last().lastIndex] = glued
+                words.removeAt(0)
+            }
+        }
+        words.filter(String::isNotEmpty).forEach { lines.last() += Piece.Word(it) }
+    }
+    for (part in Cloze.parse(variant.theory)) {
         when (part) {
             is TheoryPart.Gap -> lines.last() += Piece.Blank(part)
-            is TheoryPart.Text -> part.text.split("\n").forEachIndexed { i, chunk ->
-                if (i > 0) lines += mutableListOf<Piece>()
-                val words = chunk.split(" ").toMutableList()
-                val previous = lines.last().lastOrNull()
-                if (i == 0 && previous is Piece.Blank && words.first().isNotEmpty()) {
-                    lines.last()[lines.last().lastIndex] = previous.copy(suffix = words.removeAt(0))
-                }
-                words.filter(String::isNotEmpty).forEach { lines.last() += Piece.Word(it) }
+            is TheoryPart.Text -> for (t in MoveRefs.split(part.text, variant)) when (t) {
+                is TheoryText.Plain -> addText(t.text)
+                is TheoryText.Ref -> lines.last() += Piece.Ref(t)
             }
         }
     }
@@ -205,8 +246,9 @@ private fun lines(theory: String): List<List<Piece>> {
 /** Fill in the blanks: every "((…))" of the theory becomes a small text field. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TheoryQuiz(vm: AppViewModel, session: TrainingSession, theory: String) {
-    val lines = remember(theory) { lines(theory) }
+private fun TheoryQuiz(vm: AppViewModel, session: TrainingSession, variant: Variant) {
+    val theory = variant.theory
+    val lines = remember(variant) { lines(variant) }
     val gapCount = remember(theory) { Cloze.gaps(theory).size }
     val focusers = remember(theory) { List(gapCount) { FocusRequester() } }
     val focusManager = LocalFocusManager.current
@@ -222,6 +264,22 @@ private fun TheoryQuiz(vm: AppViewModel, session: TrainingSession, theory: Strin
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 for (piece in line) when (piece) {
                     is Piece.Word -> Text(piece.text, style = MaterialTheme.typography.bodyMedium)
+                    is Piece.Ref -> Row {
+                        val ply = piece.ref.ply
+                        val selected = ply != null && ply == session.preview
+                        Text(
+                            piece.ref.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (ply == null) MaterialTheme.colorScheme.onSurfaceVariant else INFO_COLOR,
+                            textDecoration = if (ply != null && !selected) TextDecoration.Underline else null,
+                            modifier = if (ply == null) Modifier else Modifier
+                                .background(if (selected) INFO_COLOR.copy(alpha = 0.25f) else Color.Transparent, RoundedCornerShape(4.dp))
+                                .clickable { vm.showPly(ply) }
+                                .padding(horizontal = 2.dp),
+                        )
+                        if (piece.suffix.isNotEmpty()) Text(piece.suffix, style = MaterialTheme.typography.bodyMedium)
+                    }
                     is Piece.Blank -> Row(verticalAlignment = Alignment.CenterVertically) {
                         val gap = piece.gap
                         val right = results?.get(gap.index)

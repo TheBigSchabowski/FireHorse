@@ -180,6 +180,7 @@ private fun MoveChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 /** Free text about the variant; "((…))" turns a part into a gap that training asks for. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
     TextButton(onClick = vm::toggleTheory) {
@@ -194,17 +195,23 @@ private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
         placeholder = { Text("Wenn Weiß g4 spielt, dann ((Nfd7)).") },
         minLines = 4,
         modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
-            // Cmd/Ctrl+Shift+C as in Anki: make a gap.
-            val gapKey = it.type == KeyEventType.KeyDown && it.key == Key.C && it.isShiftPressed &&
-                (it.isMetaPressed || it.isCtrlPressed)
-            if (gapKey) vm.theoryGap()
-            gapKey
+            if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            when {
+                // Cmd/Ctrl+Shift+C as in Anki: make a gap.
+                it.key == Key.C && it.isShiftPressed && (it.isMetaPressed || it.isCtrlPressed) -> vm.theoryGap().let { true }
+                // "7" + Tab → "@7. Bg5", Tab again → "@7... h6".
+                it.key == Key.Tab && !it.isShiftPressed -> vm.theoryComplete()
+                else -> false
+            }
         },
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    FlowRow {
         TextButton(onClick = vm::theoryGap, enabled = !e.theory.selection.collapsed || e.shown.isNotEmpty()) {
             Text(if (e.theory.selection.collapsed) "Lücke: letzter Zug" else "Auswahl → Lücke")
         }
+        TextButton(onClick = vm::theoryMarker, enabled = e.shown.isNotEmpty()) { Text("@ Markierung: letzter Zug") }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
         val gaps = Cloze.gaps(e.theory.text).size
         Text(
             if (gaps == 0) "Keine Lücken – wird nach dem Lösen nur angezeigt." else "$gaps Lücke(n) zum Ausfüllen",
@@ -214,8 +221,16 @@ private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
     }
     Text(
         "((Antwort)) wird abgefragt, ((Nb6|Sb6)) erlaubt beides, ((Nb6::Springer)) zeigt einen Tipp. " +
-            "Cmd/Strg+Shift+C macht die Auswahl zur Lücke.",
+            "Cmd/Strg+Shift+C macht die Auswahl zur Lücke. @8. Ng4 wird im Training ein Link zur Stellung nach diesem Zug – " +
+            "tipp 8 und Tab (nochmal Tab für Schwarz).",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    vm.editorBrokenMarkers().takeIf { it.isNotEmpty() }?.let { broken ->
+        Text(
+            "Diese Züge gibt es in der Variante nicht: " + broken.joinToString(", "),
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFFFB74D),
+        )
+    }
 }

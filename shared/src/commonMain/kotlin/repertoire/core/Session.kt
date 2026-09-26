@@ -41,11 +41,18 @@ sealed interface Outcome {
     data class Wrong(val move: Move, val expected: Move, val finished: Boolean) : Outcome
 }
 
-/** Playing through one quiz: any move order that the library knows to reach the target counts. */
-class QuizAttempt(val quiz: Quiz) {
-    var position: Position = Position.START
+/**
+ * Playing through one quiz: any move order that the library knows to reach the target counts.
+ * With [singleMove], it starts after the variant's first [startPly] moves and asks only for the next one.
+ */
+class QuizAttempt(val quiz: Quiz, val startPly: Int = 0, val singleMove: Boolean = false) {
+    init {
+        require(startPly in 0 until quiz.variant.moves.size.coerceAtLeast(1)) { "Kein Zug nach Halbzug $startPly" }
+    }
+
+    var position: Position = quiz.variant.positions[startPly]
         private set
-    var lastMove: Move? = null
+    var lastMove: Move? = quiz.variant.moves.getOrNull(startPly - 1)?.let(Move::fromUci)
         private set
     var mistakes = 0
         private set
@@ -53,7 +60,10 @@ class QuizAttempt(val quiz: Quiz) {
         private set
 
     /** Moves played so far, numbered like "1. e4", "1... c5". */
-    val played = mutableListOf<String>()
+    val played = quiz.variant.numberedSan().take(startPly).toMutableList()
+
+    /** Something has been played by the user, not only set up. */
+    val started: Boolean get() = played.size > startPly
 
     fun submit(move: Move): Outcome {
         check(!finished) { "Bereits gelöst" }
@@ -77,6 +87,6 @@ class QuizAttempt(val quiz: Quiz) {
         played += numberedSan(position, move)
         position = position.play(move)
         lastMove = move
-        if (position.key == quiz.targetKey) finished = true
+        if (position.key == quiz.targetKey || singleMove) finished = true
     }
 }

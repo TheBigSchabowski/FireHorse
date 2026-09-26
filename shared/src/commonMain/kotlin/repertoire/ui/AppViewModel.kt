@@ -14,6 +14,7 @@ import repertoire.core.Grade
 import repertoire.core.TheoryPart
 import repertoire.core.Library
 import repertoire.core.Move
+import repertoire.core.MoveRefs
 import repertoire.core.Outcome
 import repertoire.core.Position
 import repertoire.core.Progress
@@ -31,10 +32,17 @@ enum class FeedbackTone { GOOD, BAD, INFO }
 
 data class Feedback(val text: String, val tone: FeedbackTone)
 
+/** One task in a session: a whole variant from the start, or with [singleMove] just the move after [startPly]. */
+data class Drill(val quiz: Quiz, val startPly: Int = 0, val singleMove: Boolean = false) {
+    fun attempt() = QuizAttempt(quiz, startPly, singleMove)
+}
+
+private val QuizAttempt.drill get() = Drill(quiz, startPly, singleMove)
+
 class TrainingSession(
     val title: String,
     val graded: Boolean,
-    val queue: ArrayDeque<Quiz>,
+    val queue: ArrayDeque<Drill>,
 ) {
     var attempt by mutableStateOf<QuizAttempt?>(null)
 
@@ -56,7 +64,12 @@ class TrainingSession(
     /** Gap index → answered right, once "Prüfen" was pressed; null before. */
     var gapResults by mutableStateOf<List<Boolean>?>(null)
 
-    val gaps: List<TheoryPart.Gap> get() = attempt?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
+    /** Board shown after this many moves of the variant, from a "@8. Ng4" in the theory; null shows the attempt. */
+    var preview by mutableStateOf<Int?>(null)
+
+    /** Single moves do not ask the theory. */
+    val gaps: List<TheoryPart.Gap>
+        get() = attempt?.takeIf { !it.singleMove }?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
 
     /** The position is reached and every gap is checked: ready to be graded. */
     val done: Boolean get() = attempt?.finished == true && (gapResults != null || gaps.isEmpty())
@@ -224,6 +237,33 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         e.theory = TextFieldValue(text, TextRange(sel.min + gap.length))
     }
 
+    /** Inserts "@8. Ng4" for the move on the board at the text cursor: in training it links to the board after that move. */
+    fun theoryMarker() {
+        val e = editor ?: return
+        val marker = MoveRefs.markerFor(e.shown) ?: return
+        val t = e.theory
+        val sel = t.selection
+        val text = t.text.substring(0, sel.min) + marker + t.text.substring(sel.max)
+        e.theory = TextFieldValue(text, TextRange(sel.min + marker.length))
+    }
+
+    /** Tab in the theory field: "7" → "@7. Bg5" → "@7... h6" → "@7. Bg5" …; false if there is nothing to complete. */
+    fun theoryComplete(): Boolean {
+        val e = editor ?: return false
+        val t = e.theory
+        if (!t.selection.collapsed) return false
+        val cursor = t.selection.start
+        val (start, marker) = MoveRefs.complete(t.text.substring(0, cursor), e.moves) ?: return false
+        e.theory = TextFieldValue(t.text.substring(0, start) + marker + t.text.substring(cursor), TextRange(start + marker.length))
+        return true
+    }
+
+    /** "@…" markers in the theory that name no move of the variant being edited. */
+    fun editorBrokenMarkers(): List<String> {
+        val e = editor ?: return emptyList()
+        return MoveRefs.unresolved(e.theory.text, Variant("", "", "", e.moves.map { it.uci }))
+    }
+
     /** Title of another saved variant that already ends in the editor's position. */
     fun editorDuplicate(): String? {
         val e = editor ?: return null
@@ -273,16 +313,23 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     // ---- Training ------------------------------------------------------------------------
 
     fun startLearning() {
-        start(TrainingSession("Lernen", graded = true, ArrayDeque(Scheduler.dueQueue(quizzes, progress, library.settings))))
+        start(TrainingSession("Lernen", graded = true, ArrayDeque(Scheduler.dueQueue(quizzes, progress, library.settings).map(::Drill))))
     }
 
     fun startCram() {
-        start(TrainingSession("Frei üben", graded = false, ArrayDeque(Scheduler.cramQueue(quizzes, progress))))
+        start(TrainingSession("Frei üben", graded = false, ArrayDeque(Scheduler.cramQueue(quizzes, progress).map(::Drill))))
     }
 
     fun practice(variantId: String) {
         val quiz = quizzes.firstOrNull { it.variant.id == variantId } ?: return
-        start(TrainingSession("Üben", graded = false, ArrayDeque(listOf(quiz))))
+        start(TrainingSession("Üben", graded = false, ArrayDeque(listOf(Drill(quiz)))))
+    }
+
+    /** Every position of the variant in random order; each time only the next move is asked. */
+    fun practiceMoves(variantId: String) {
+        val quiz = quizzes.firstOrNull { it.variant.id == variantId } ?: return
+        val drills = quiz.variant.moves.indices.map { Drill(quiz, startPly = it, singleMove = true) }.shuffled()
+        start(TrainingSession("Züge üben", graded = false, ArrayDeque(drills)))
     }
 
     private fun start(s: TrainingSession) {
@@ -295,7 +342,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     private fun nextQuiz(s: TrainingSession) {
-        s.attempt = s.queue.removeFirstOrNull()?.let(::QuizAttempt)
+        s.attempt = s.queue.removeFirstOrNull()?.attempt()
+        s.preview = null
         s.feedback = null
         s.marks = emptyMap()
         s.showTarget = false
@@ -310,7 +358,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val s = session ?: return
         val attempt = s.attempt ?: return
         s.earlierMistakes += attempt.mistakes
-        s.attempt = QuizAttempt(attempt.quiz)
+        s.attempt = attempt.drill.attempt()
+        s.preview = null
         s.gapInputs = List(s.gaps.size) { "" }
         s.gapResults = null
         s.feedback = null
@@ -328,6 +377,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 s.marks = if (outcome.finished) mapOf(move.from to true, move.to to true) else emptyMap()
                 s.feedback = when {
                     !outcome.finished -> null
+                    attempt.singleMove -> Feedback("Richtig!", FeedbackTone.GOOD)
                     attempt.mistakes > 0 -> Feedback("Stellung erreicht, aber mit ${attempt.mistakes} Fehler(n).", FeedbackTone.BAD)
                     else -> Feedback("Richtig! Das ist die Stellung.", FeedbackTone.GOOD)
                 }
@@ -350,6 +400,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             }
         }
         s.revision++
+    }
+
+    /** Shows the board after [ply] moves of the variant (a "@8. Ng4" in the theory), or the attempt again for null / the same ply. */
+    fun showPly(ply: Int?) {
+        val s = session ?: return
+        s.preview = if (ply == s.preview) null else ply
     }
 
     fun toggleTarget() {
@@ -406,7 +462,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 ),
             )
         }
-        if (g == Grade.AGAIN) s.queue.add(minOf(3, s.queue.size), attempt.quiz)
+        if (g == Grade.AGAIN) s.queue.add(minOf(3, s.queue.size), attempt.drill)
         s.answered++
         nextQuiz(s)
     }
@@ -417,7 +473,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val id = s.attempt?.quiz?.variant?.id ?: return
         val old = progress.cards[id] ?: ReviewState(0.0, 0.0, 0, 0)
         saveProgress(progress.copy(cards = progress.cards + (id to old.copy(suspended = true))))
-        s.queue.removeAll { it.variant.id == id }
+        s.queue.removeAll { it.quiz.variant.id == id }
         nextQuiz(s)
     }
 
