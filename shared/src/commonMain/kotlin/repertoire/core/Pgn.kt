@@ -24,10 +24,10 @@ data class PastedLine(
  * moves. Only the main line is kept; side lines in brackets and comments are thrown away.
  */
 object Pgn {
-    private val HEADER = Regex("""\[\s*([A-Za-z0-9_]+)\s*"([^"]*)"\s*]""")
+    private val HEADER = Regex("""\[\s*([A-Za-z0-9_]+)\s*"([^"]*)"\s*\]""")
 
-    /** A "{ … }" comment. PGN does not nest them. */
-    private val BRACE_COMMENT = Regex("""\{[^}]*}""")
+    /** A "{ … }" comment. PGN does not nest them. Android's regex engine needs the closing brace escaped. */
+    private val BRACE_COMMENT = Regex("""\{[^\}]*\}""")
 
     /** ";" to the end of the line, and a "%" escape taking up a whole line. */
     private val REST_OF_LINE = Regex("""(?m)(;|^[ \t]*%).*$""")
