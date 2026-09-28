@@ -113,6 +113,8 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
             Spacer(Modifier.height(10.dp))
             Text(
                 when {
+                    !attempt.singleMove && variant.setUp ->
+                        "Spiele beide Seiten ab dieser Stellung weiter, bis die Zielstellung auf dem Brett steht."
                     !attempt.singleMove -> "Spiele beide Seiten vom Start, bis diese Stellung auf dem Brett steht."
                     variant.positions[attempt.startPly].whiteToMove -> "Finde den nächsten Zug für Weiß."
                     else -> "Finde den nächsten Zug für Schwarz."

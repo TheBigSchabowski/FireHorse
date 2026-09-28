@@ -2,7 +2,7 @@ package repertoire.core
 
 import kotlinx.serialization.Serializable
 
-/** A named position, entered by playing the moves that lead to it from the start. */
+/** A named position, entered by playing the moves that lead to it from [startFen]. */
 @Serializable
 data class Variant(
     val id: String,
@@ -10,22 +10,35 @@ data class Variant(
     val opening: String,
     /** e.g. "Scheveningen" */
     val name: String,
-    /** Moves from the start position in UCI notation ("e2e4"). */
+    /** Moves from [startFen] in UCI notation ("e2e4"). */
     val moves: List<String>,
     /** Board orientation while training this variant. */
     val playWhite: Boolean = true,
     /** Notes shown after the position is reached; "((Nb6))" marks a gap to fill in, see [Cloze]. */
     val theory: String = "",
+    /**
+     * Where the line begins. Normally the start of a game; a variant imported from a FEN begins at
+     * that position instead and is trained by playing on from there.
+     */
+    val startFen: String = Position.START_FEN,
 ) {
+    /** True if the line does not begin at the start of a game. */
+    val setUp: Boolean get() = startFen != Position.START_FEN
+
+    val start: Position get() = if (setUp) Position.fromFen(startFen) else Position.START
+
     /** Start position followed by the position after each move. */
     val positions: List<Position> by lazy {
-        moves.runningFold(Position.START) { p, uci -> p.play(Move.fromUci(uci)) }
+        moves.runningFold(start) { p, uci -> p.play(Move.fromUci(uci)) }
     }
 
     val target: Position get() = positions.last()
 
     /** ["1. e4", "1... c5", ...] */
     fun numberedSan(): List<String> = moves.mapIndexed { i, uci -> numberedSan(positions[i], Move.fromUci(uci)) }
+
+    /** The same puzzle: the same moves from the same position, so a learning state still fits. */
+    fun sameLine(other: Variant): Boolean = moves == other.moves && startFen == other.startFen
 }
 
 fun numberedSan(before: Position, move: Move): String {

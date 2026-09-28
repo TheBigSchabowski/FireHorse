@@ -16,6 +16,8 @@ import repertoire.core.Library
 import repertoire.core.Move
 import repertoire.core.MoveRefs
 import repertoire.core.Outcome
+import repertoire.core.PastedLine
+import repertoire.core.Pgn
 import repertoire.core.Position
 import repertoire.core.Progress
 import repertoire.core.Quiz
@@ -85,12 +87,22 @@ class EditorState(
     theory: String = "",
     /** Open the board at the start instead of at the end of the line, to step through it. */
     fromStart: Boolean = false,
+    startFen: String = Position.START_FEN,
+    /** Shown above the board, e.g. what a pasted PGN turned into. */
+    val note: String? = null,
 ) {
     var opening by mutableStateOf(opening)
     var name by mutableStateOf(name)
     var moves by mutableStateOf(moves)
     var playWhite by mutableStateOf(playWhite)
     var theory by mutableStateOf(TextFieldValue(theory))
+
+    /** Where the line begins; not the start of a game when it came from a FEN. */
+    var startFen by mutableStateOf(startFen)
+
+    val setUp: Boolean get() = startFen != Position.START_FEN
+
+    val start: Position get() = if (setUp) Position.fromFen(startFen) else Position.START
 
     /** The theory field is open (Cmd/Ctrl+T). */
     var showTheory by mutableStateOf(theory.isNotBlank())
@@ -110,13 +122,25 @@ class EditorState(
     val atEnd: Boolean get() = cursor >= moves.size
 
     /** Position shown on the board. */
-    val position: Position get() = shown.fold(Position.START) { p, m -> p.play(m) }
+    val position: Position get() = shown.fold(start) { p, m -> p.play(m) }
 
     /** Position the whole line leads to, the one that is trained. */
-    val target: Position get() = moves.fold(Position.START) { p, m -> p.play(m) }
+    val target: Position get() = moves.fold(start) { p, m -> p.play(m) }
 
     /** Start position followed by the position after each move. */
-    val positions: List<Position> get() = moves.runningFold(Position.START) { p, m -> p.play(m) }
+    val positions: List<Position> get() = moves.runningFold(start) { p, m -> p.play(m) }
+
+    /** The variant as it would be saved, for checks that work on a [Variant]. */
+    fun asVariant(): Variant =
+        Variant(editingId ?: "", opening, name, moves.map { it.uci }, playWhite, theory.text, startFen)
+}
+
+/** The "PGN/FEN einfügen" dialog: paste the text, read it, then carry on in the editor. */
+class PasteState {
+    var text by mutableStateOf("")
+
+    /** Why the text could not be read, shown under the field. */
+    var error by mutableStateOf<String?>(null)
 }
 
 class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
@@ -127,6 +151,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     var session by mutableStateOf<TrainingSession?>(null)
         private set
     var editor by mutableStateOf<EditorState?>(null)
+        private set
+    var paste by mutableStateOf<PasteState?>(null)
         private set
 
     val dataLocation: String get() = store.location
@@ -165,12 +191,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             name = "",
             moves = template?.moves?.map(Move::fromUci) ?: emptyList(),
             playWhite = template?.playWhite ?: last?.playWhite ?: true,
+            startFen = template?.startFen ?: Position.START_FEN,
         )
     }
 
     /** Opens a saved variant; [fromStart] puts the board at move zero to step through the line. */
     fun editVariant(v: Variant, fromStart: Boolean = false) {
-        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart)
+        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart, v.startFen)
     }
 
     /**
@@ -228,7 +255,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val sel = t.selection
         val inner = if (sel.collapsed) {
             val last = e.shown.lastOrNull() ?: return
-            e.shown.dropLast(1).fold(Position.START) { p, m -> p.play(m) }.san(last)
+            e.shown.dropLast(1).fold(e.start) { p, m -> p.play(m) }.san(last)
         } else {
             t.text.substring(sel.min, sel.max)
         }
@@ -240,7 +267,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** Inserts "@8. Ng4" for the move on the board at the text cursor: in training it links to the board after that move. */
     fun theoryMarker() {
         val e = editor ?: return
-        val marker = MoveRefs.markerFor(e.shown) ?: return
+        val marker = MoveRefs.markerFor(e.start, e.shown) ?: return
         val t = e.theory
         val sel = t.selection
         val text = t.text.substring(0, sel.min) + marker + t.text.substring(sel.max)
@@ -253,7 +280,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val t = e.theory
         if (!t.selection.collapsed) return false
         val cursor = t.selection.start
-        val (start, marker) = MoveRefs.complete(t.text.substring(0, cursor), e.moves) ?: return false
+        val (start, marker) = MoveRefs.complete(t.text.substring(0, cursor), e.start, e.moves) ?: return false
         e.theory = TextFieldValue(t.text.substring(0, start) + marker + t.text.substring(cursor), TextRange(start + marker.length))
         return true
     }
@@ -261,7 +288,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** "@…" markers in the theory that name no move of the variant being edited. */
     fun editorBrokenMarkers(): List<String> {
         val e = editor ?: return emptyList()
-        return MoveRefs.unresolved(e.theory.text, Variant("", "", "", e.moves.map { it.uci }))
+        return MoveRefs.unresolved(e.theory.text, e.asVariant())
     }
 
     /** Title of another saved variant that already ends in the editor's position. */
@@ -279,20 +306,22 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val id = e.editingId ?: return false
         if (!progress.cards.containsKey(id)) return false
         val old = library.variants.firstOrNull { it.id == id } ?: return false
-        return old.moves != e.moves.map { it.uci }
+        return !old.sameLine(e.asVariant())
     }
 
     fun saveEditor() {
         val e = editor ?: return
         if (e.name.isBlank() || e.moves.isEmpty()) return
         val id = e.editingId ?: newId()
-        val variant = Variant(id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite, e.theory.text.trim())
+        val variant = Variant(
+            id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite, e.theory.text.trim(), e.startFen,
+        )
         val old = library.variants.firstOrNull { it.id == id }
         updateLibrary { lib ->
             lib.copy(variants = if (old != null) lib.variants.map { if (it.id == id) variant else it } else lib.variants + variant)
         }
         // Different moves means a different puzzle: start learning it from scratch.
-        if (old != null && old.moves != variant.moves) saveProgress(progress.copy(cards = progress.cards - id))
+        if (old != null && !old.sameLine(variant)) saveProgress(progress.copy(cards = progress.cards - id))
         editor = null
     }
 
@@ -475,6 +504,72 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         saveProgress(progress.copy(cards = progress.cards + (id to old.copy(suspended = true))))
         s.queue.removeAll { it.quiz.variant.id == id }
         nextQuiz(s)
+    }
+
+    // ---- Pasting a PGN or FEN ------------------------------------------------------------
+
+    fun openPaste() {
+        paste = PasteState()
+    }
+
+    fun cancelPaste() {
+        paste = null
+    }
+
+    fun setPasteText(text: String) {
+        paste?.let {
+            it.text = text
+            it.error = null
+        }
+    }
+
+    /**
+     * Reads the pasted PGN or FEN and opens the editor with it, so the line can be shortened and
+     * named before it is saved. On failure the dialog stays open and says what went wrong.
+     */
+    fun applyPaste() {
+        val p = paste ?: return
+        val line = try {
+            Pgn.parse(p.text)
+        } catch (e: IllegalArgumentException) {
+            p.error = e.message ?: "Der Text lässt sich nicht lesen."
+            return
+        }
+        paste = null
+        editor = EditorState(
+            editingId = null,
+            opening = line.opening.ifBlank { library.variants.lastOrNull()?.opening ?: "" },
+            name = line.name,
+            moves = line.moves.map(Move::fromUci),
+            playWhite = line.playWhite,
+            // At move zero, so the line can be walked through and cut where it gets interesting.
+            fromStart = true,
+            startFen = line.startFen,
+            note = pasteNote(line),
+        )
+    }
+
+    private fun pasteNote(line: PastedLine): String = buildString {
+        when {
+            line.moves.isEmpty() ->
+                append("Stellung aus der FEN übernommen. Spiel von hier die Züge, die du üben willst.")
+            line.setUp ->
+                append("${line.moves.size} Züge ab der FEN-Stellung übernommen.")
+            else ->
+                append("${line.moves.size} Züge übernommen. Mit ▶ durchgehen, „Ab hier kürzen“ schneidet den Rest weg.")
+        }
+        if (line.otherGames > 0) {
+            append(" Im Text standen ${line.otherGames + 1} Partien – übernommen ist die erste.")
+        }
+    }
+
+    /** Resets the line to the start of a game; the moves from the pasted position no longer fit. */
+    fun editorResetStart() {
+        val e = editor ?: return
+        if (!e.setUp) return
+        e.startFen = Position.START_FEN
+        e.moves = emptyList()
+        e.cursor = 0
     }
 
     // ---- Export / import -----------------------------------------------------------------

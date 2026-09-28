@@ -166,6 +166,97 @@ class EditorTest {
     }
 
     @Test
+    fun aPastedPgnLandsInTheEditorReadyToBeShortened() {
+        val vm = app()
+        vm.openPaste()
+        vm.setPasteText("[Opening \"Sizilianisch: Najdorf\"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 *")
+        vm.applyPaste()
+        assertNull(vm.paste)
+        val e = vm.editor!!
+        assertEquals("Sizilianisch", e.opening)
+        assertEquals("Najdorf", e.name)
+        assertEquals(10, e.moves.size)
+        // The board starts at move zero so the line can be walked through and cut.
+        assertEquals(0, e.cursor)
+        assertFalse(e.setUp)
+        // Black played the last move, so this is a Black line.
+        assertFalse(e.playWhite)
+
+        vm.editorGoTo(6)
+        vm.editorTruncate()
+        vm.saveEditor()
+        assertEquals("1. e4 1... c5 2. Nf3 2... d6 3. d4 3... cxd4", vm.san())
+    }
+
+    @Test
+    fun aPastedFenBecomesAVariantThatStartsThere() {
+        val fen = "r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 7"
+        val vm = app()
+        vm.openPaste()
+        vm.setPasteText(fen)
+        vm.applyPaste()
+        val e = vm.editor!!
+        assertTrue(e.setUp)
+        assertEquals(fen, e.position.fen)
+        // A position alone is not a puzzle yet: the continuation still has to be played.
+        assertEquals(0, e.moves.size)
+        e.name = "Aus der FEN"
+        vm.saveEditor()
+        assertEquals(0, vm.library.variants.size)
+
+        vm.play("e5 Nf3")
+        vm.saveEditor()
+        val saved = vm.library.variants.single()
+        assertEquals(fen, saved.startFen)
+        assertEquals("7... e5 8. Nf3", saved.numberedSan().joinToString(" "))
+        assertEquals(fen, saved.start.fen)
+
+        // Training this variant begins at the pasted position, not at the start of a game.
+        vm.practice(saved.id)
+        assertEquals(fen, vm.session!!.attempt!!.position.fen)
+    }
+
+    @Test
+    fun aPastedFenSurvivesARestartAndCanBeUndone() {
+        val fen = "r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 7"
+        val vm = app()
+        vm.openPaste()
+        vm.setPasteText("$fen 7... e5")
+        vm.applyPaste()
+        vm.editor!!.name = "Najdorf-Mitte"
+        vm.saveEditor()
+
+        val restarted = app()
+        val saved = restarted.library.variants.single()
+        assertEquals(fen, saved.startFen)
+        assertEquals("7... e5", saved.numberedSan().joinToString(" "))
+
+        // Back to the normal start position: the moves from the pasted one no longer fit.
+        restarted.editVariant(saved)
+        assertTrue(restarted.editor!!.setUp)
+        restarted.editorResetStart()
+        assertFalse(restarted.editor!!.setUp)
+        assertEquals(0, restarted.editor!!.moves.size)
+        assertEquals(Position.START.fen, restarted.editor!!.position.fen)
+    }
+
+    @Test
+    fun textThatIsNoPgnKeepsTheDialogOpen() {
+        val vm = app()
+        vm.openPaste()
+        vm.setPasteText("1. e4 Qh8")
+        vm.applyPaste()
+        assertNull(vm.editor)
+        assertEquals("„Qh8“ ist nach 1. e4 nicht möglich", vm.paste!!.error)
+        // Typing again clears the complaint.
+        vm.setPasteText("1. e4 e5")
+        assertNull(vm.paste!!.error)
+        vm.applyPaste()
+        assertNull(vm.paste)
+        assertEquals(2, vm.editor!!.moves.size)
+    }
+
+    @Test
     fun onlyTheEndOfTheLineCountsAsADuplicate() {
         val vm = app()
         vm.add("Offen", LINE)

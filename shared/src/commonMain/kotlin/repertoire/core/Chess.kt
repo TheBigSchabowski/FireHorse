@@ -115,6 +115,20 @@ class Position private constructor(
 
     fun isCheck(): Boolean = isAttacked(kingSquare(whiteToMove), !whiteToMove)
 
+    /**
+     * Why this position cannot occur in a game, in German, or null if it is sound. Only needed for
+     * positions that come from outside, e.g. a pasted FEN: move generation assumes both kings exist.
+     */
+    fun problem(): String? = when {
+        board.count { it == 'K' } != 1 || board.count { it == 'k' } != 1 ->
+            "Die Stellung braucht genau einen weißen und einen schwarzen König."
+        (0..7).any { board[it].lowercaseChar() == 'p' } || (56..63).any { board[it].lowercaseChar() == 'p' } ->
+            "Auf der ersten und der achten Reihe kann kein Bauer stehen."
+        isAttacked(kingSquare(!whiteToMove), whiteToMove) ->
+            "Da steht der König der Seite im Schach, die gerade gezogen hat – so eine Stellung gibt es nicht."
+        else -> null
+    }
+
     private fun pseudoLegalMoves(): List<Move> {
         val moves = mutableListOf<Move>()
         val white = whiteToMove

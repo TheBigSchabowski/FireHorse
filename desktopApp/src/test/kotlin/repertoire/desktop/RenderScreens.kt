@@ -106,5 +106,29 @@ fun main() {
         vm.sample()
         vm.practiceMoves(vm.library.variants.last().id)
     }
+    render("einfuegen") { vm ->
+        vm.sample()
+        vm.openPaste()
+        vm.setPasteText("[Opening \"Sizilianisch: Najdorf\"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 *")
+    }
+    render("einfuegen-fehler") { vm ->
+        vm.sample()
+        vm.openPaste()
+        vm.setPasteText("1. e4 c5 2. Nf6")
+        vm.applyPaste()
+    }
+    render("einfuegen-pgn") { vm ->
+        vm.sample()
+        vm.openPaste()
+        vm.setPasteText("[Opening \"Sizilianisch: Najdorf\"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 *")
+        vm.applyPaste()
+        repeat(6) { vm.editorStepForward() }
+    }
+    render("einfuegen-fen") { vm ->
+        vm.sample()
+        vm.openPaste()
+        vm.setPasteText("r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 7")
+        vm.applyPaste()
+    }
     println("Screens in ${out.absolutePath}")
 }

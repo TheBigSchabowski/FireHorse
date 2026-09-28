@@ -53,6 +53,10 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             if (e.editingId == null) "Neue Variante" else "Variante bearbeiten",
             style = MaterialTheme.typography.titleLarge,
         )
+        e.note?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF90CAF9))
+        }
         Spacer(Modifier.height(12.dp))
         BoardWithPanel(
             board = { modifier ->
@@ -80,14 +84,26 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                if (e.atEnd) {
-                    "Spiele auf dem Brett die Züge vom Start bis zur Stellung (beide Seiten)."
-                } else {
-                    "Zug ${e.cursor} von ${e.moves.size}. Ein anderer Zug auf dem Brett ersetzt ab hier den Rest."
+                when {
+                    !e.atEnd -> "Zug ${e.cursor} von ${e.moves.size}. Ein anderer Zug auf dem Brett ersetzt ab hier den Rest."
+                    e.setUp -> "Spiele auf dem Brett die Züge ab der eingefügten Stellung (beide Seiten)."
+                    else -> "Spiele auf dem Brett die Züge vom Start bis zur Stellung (beide Seiten)."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (e.setUp) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Startet ab einer eigenen Stellung, nicht ab der Grundstellung.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = vm::editorResetStart) { Text("Doch ab Grundstellung") }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             MoveList(vm, e)
             Spacer(Modifier.height(8.dp))

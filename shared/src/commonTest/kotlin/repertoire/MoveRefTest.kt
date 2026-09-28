@@ -52,13 +52,13 @@ class MoveRefTest {
             parts,
         )
         assertEquals(listOf("6... Be3"), MoveRefs.unresolved("@6... Be3", najdorf))
-        assertEquals("@6... Ng4", MoveRefs.markerFor(najdorf.moves.take(12).map(Move::fromUci)))
+        assertEquals("@6... Ng4", MoveRefs.markerFor(najdorf.start, najdorf.moves.take(12).map(Move::fromUci)))
     }
 
     @Test
     fun tabCompletesNumberThenSwitchesSides() {
         val moves = najdorf.moves.map(Move::fromUci)
-        fun tab(text: String) = MoveRefs.complete(text, moves)?.let { (start, marker) -> text.substring(0, start) + marker }
+        fun tab(text: String) = MoveRefs.complete(text, najdorf.start, moves)?.let { (start, marker) -> text.substring(0, start) + marker }
 
         assertEquals("Nach @7. Bg5", tab("Nach 7"))
         assertEquals("Nach @7... h6", tab("Nach @7. Bg5"))
@@ -70,7 +70,7 @@ class MoveRefTest {
         // The line ends with Black's 10th move; White's 10th exists, Black's 11th does not.
         assertEquals("@10... O-O", tab("@10. Be2"))
         assertEquals("@10. Be2", tab(tab("@10. Be2")!!))
-        assertEquals("@10. Be2", MoveRefs.complete("@10. Be2", moves.take(19))?.second)
+        assertEquals("@10. Be2", MoveRefs.complete("@10. Be2", najdorf.start, moves.take(19))?.second)
     }
 
     @Test

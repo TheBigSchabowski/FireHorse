@@ -27,6 +27,14 @@ installieren“ erlauben.
 
 - **+ Neue Variante:** Züge spielen, Namen geben, speichern. „Weiterführen“ bei einer vorhandenen
   Variante übernimmt ihre Züge, dann hängst du nur noch an, was anders ist.
+- **PGN/FEN einfügen:** eine Zugfolge oder Stellung, die du irgendwo gefunden hast, ins Feld
+  einfügen (Cmd/Strg+V, am Handy lange drücken). Aus einer **PGN** wird die Hauptvariante –
+  Kopfzeilen, Kommentare `{…}`, Nebenvarianten `(…)`, `!?`/`$1` und das Ergebnis fallen weg,
+  `Eröffnung`/`Variation` aus dem Kopf füllen die Namen, und wer den letzten Zug gemacht hat, ist
+  die Seite, die du spielst. Aus einer **FEN** wird die Stellung, ab der die Variante beginnt –
+  du spielst von dort die Züge, die du üben willst, und trainierst sie später auch ab dort. Das
+  Eingefügte landet erst im Editor: durchgehen, mit „Ab hier kürzen“ zuschneiden, benennen,
+  speichern. Eine bloße Zugliste („e4 c5 Nf3“) geht genauso.
 - **Durchgehen:** öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶|, den Pfeiltasten ← → oder einem Klick
   auf einen Zug in der Liste gehst du die Züge durch — nichts wird dabei gelöscht.
 - **Bearbeiten:** dasselbe Brett, nur gleich bei der Endstellung. Ein Zug mitten in der Variante

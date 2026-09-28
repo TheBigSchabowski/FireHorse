@@ -13,20 +13,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,6 +44,7 @@ import repertoire.core.shortDate
 @Composable
 fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
+    vm.paste?.let { PasteDialog(vm, it) }
     Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
         Text("Eröffnungs-Puzzle", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
@@ -46,6 +52,7 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }
             OutlinedButton(onClick = vm::startCram, enabled = stats.total > 0) { Text("Frei üben") }
             FilledTonalButton(onClick = { vm.newVariant() }) { Text("+ Neue Variante") }
+            OutlinedButton(onClick = vm::openPaste) { Text("PGN/FEN einfügen") }
         }
         Spacer(Modifier.height(6.dp))
         Text("${stats.due} fällig · ${stats.new} neu · ${stats.total} Varianten", style = MaterialTheme.typography.bodyMedium)
@@ -53,7 +60,8 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(20.dp))
         if (vm.library.variants.isEmpty()) {
             Text(
-                "Noch keine Varianten. Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen.",
+                "Noch keine Varianten. Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen – " +
+                    "oder füg mit „PGN/FEN einfügen“ eine Zugfolge ein, die du irgendwo gefunden hast.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -116,7 +124,7 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Text(v.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "$status  ·  ${if (v.playWhite) "Weiß" else "Schwarz"}",
+                "$status  ·  ${if (v.playWhite) "Weiß" else "Schwarz"}" + if (v.setUp) "  ·  ab eigener Stellung" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -144,4 +152,48 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
             }
         }
     }
+}
+
+/**
+ * Paste a PGN or a FEN from somewhere else. The field is focused right away, so Cmd/Strg+V is enough;
+ * what comes out of the text is then opened in the editor instead of being saved straight away.
+ */
+@Composable
+private fun PasteDialog(vm: AppViewModel, p: PasteState) {
+    val focus = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = vm::cancelPaste,
+        title = { Text("PGN oder FEN einfügen") },
+        text = {
+            Column {
+                LaunchedEffect(Unit) { focus.requestFocus() }
+                Text(
+                    "Zugfolge oder Stellung hier einfügen – am Mac mit Cmd+V, am Handy lange drücken. " +
+                        "Aus einer PGN wird die Zugfolge (Kommentare und Nebenvarianten fallen weg), " +
+                        "aus einer FEN die Stellung, ab der du weiterspielst.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    p.text,
+                    vm::setPasteText,
+                    label = { Text("PGN / FEN") },
+                    placeholder = { Text("1. e4 c5 2. Nf3 d6 3. d4 cxd4") },
+                    minLines = 4,
+                    maxLines = 8,
+                    isError = p.error != null,
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+                p.error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = Color(0xFFE57373), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = vm::applyPaste, enabled = p.text.isNotBlank()) { Text("Übernehmen") }
+        },
+        dismissButton = { TextButton(onClick = vm::cancelPaste) { Text("Abbrechen") } },
+    )
 }

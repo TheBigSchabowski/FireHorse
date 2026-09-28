@@ -22,7 +22,8 @@ import kotlinx.serialization.json.Json
  * }
  * ```
  *
- * "id" and "progress" are optional; without an id a variant is always added as new.
+ * "id" and "progress" are optional; without an id a variant is always added as new. "startFen" only
+ * appears for a variant that does not begin at the start of a game, and "moves" then counts from there.
  */
 @Serializable
 data class ExportFile(
@@ -45,6 +46,8 @@ data class ExportedVariant(
     /** SAN with or without move numbers ("1. e4 c5 2. Nf3"); UCI ("e2e4") works as well. */
     val moves: String,
     val theory: String = "",
+    /** Left out for a variant that starts at the beginning of a game, which is the normal case. */
+    val startFen: String? = null,
     /** Learning state; left out, the variant starts as new. */
     val progress: ReviewState? = null,
 )
@@ -76,6 +79,7 @@ object Exchange {
                         playWhite = v.playWhite,
                         moves = compactMoves(v.numberedSan()),
                         theory = v.theory,
+                        startFen = v.startFen.takeIf { v.setUp },
                         progress = if (withProgress) progress.cards[v.id] else null,
                     )
                 },
@@ -101,8 +105,16 @@ object Exchange {
         val errors = mutableListOf<String>()
         for (e in file.variants) {
             val label = listOf(e.opening, e.name).filter(String::isNotBlank).joinToString(" › ")
+            // Read back and written out again, so a hand-written FEN ends up in the usual shape.
+            val start = try {
+                Position.fromFen(e.startFen?.takeIf(String::isNotBlank) ?: Position.START_FEN)
+                    .also { p -> p.problem()?.let { throw IllegalArgumentException(it) } }
+            } catch (ex: IllegalArgumentException) {
+                errors += "$label: ${ex.message}"
+                continue
+            }
             val moves = try {
-                parseMoves(e.moves)
+                parseMoves(e.moves, start)
             } catch (ex: IllegalArgumentException) {
                 errors += "$label: ${ex.message}"
                 continue
@@ -112,7 +124,7 @@ object Exchange {
                 continue
             }
             val id = e.id?.takeIf(String::isNotBlank) ?: newId()
-            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory)
+            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory, start.fen)
             val old = variants.firstOrNull { it.id == id }
             if (old != null) {
                 variants = variants.map { if (it.id == id) variant else it }
@@ -123,30 +135,37 @@ object Exchange {
             }
             cards = when {
                 e.progress != null -> cards + (id to e.progress)
-                old != null && old.moves != moves -> cards - id
+                old != null && !old.sameLine(variant) -> cards - id
                 else -> cards
             }
         }
         return ImportResult(library.copy(variants = variants), progress.copy(cards = cards), added, updated, errors)
     }
 
-    /** "1. e4 c5 2. Nf3", "1.e4 c5", "e2e4 c7c5" → UCI moves. */
-    fun parseMoves(text: String): List<String> {
-        var position = Position.START
+    /** "1. e4 c5 2. Nf3", "1.e4 c5", "e2e4 c7c5" → UCI moves, counted from [from]. */
+    fun parseMoves(text: String, from: Position = Position.START): List<String> {
+        var position = from
         val result = mutableListOf<String>()
         val tokens = text.split(Regex("\\s+"))
             .map { it.replace(Regex("^\\d+\\.+"), "") }
-            .filter { it.isNotEmpty() && it !in setOf("*", "1-0", "0-1", "1/2-1/2") }
+            .filter { it.isNotEmpty() && it !in RESULTS }
         for (token in tokens) {
             val move = position.parseSan(token)
                 ?: runCatching { Move.fromUci(token) }.getOrNull()?.takeIf(position::isLegal)
-                ?: throw IllegalArgumentException("„$token“ ist nach ${compactMoves(numbered(result))} nicht möglich")
+                ?: throw IllegalArgumentException("„$token“ ist nach ${played(from, result)} nicht möglich")
             result += move.uci
             position = position.play(move)
         }
         return result
     }
 
-    private fun numbered(uci: List<String>): List<String> =
-        Variant("", "", "", uci).numberedSan().ifEmpty { listOf("Start") }
+    private val RESULTS = setOf("*", "1-0", "0-1", "1/2-1/2", "½-½", "1/2")
+
+    /** The moves read so far, to say where a move that does not fit went wrong. */
+    private fun played(from: Position, uci: List<String>): String =
+        if (uci.isEmpty()) {
+            "der Ausgangsstellung"
+        } else {
+            compactMoves(Variant("", "", "", uci, startFen = from.fen).numberedSan())
+        }
 }

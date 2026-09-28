@@ -56,8 +56,9 @@ object MoveRefs {
      * Tab completion in the theory field: "7" becomes "@7. Bg5" (White's 7th move of [moves]),
      * a second Tab turns it into "@7... h6" and a third back into White's. [before] is the text up to
      * the cursor; returns where the replaced part starts and what replaces it, or null if nothing fits.
+     * [start] is where the line begins, which need not be the start of a game.
      */
-    fun complete(before: String, moves: List<Move>): Pair<Int, String>? {
+    fun complete(before: String, start: Position, moves: List<Move>): Pair<Int, String>? {
         val marker = TYPED_MARKER.find(before)
         // After White's marker comes Black's move, otherwise White's.
         val (match, number, wantBlack) = if (marker != null) {
@@ -67,16 +68,19 @@ object MoveRefs {
             Triple(m, m.groupValues[1].toInt(), false)
         }
         if (number < 1) return null
-        val white = (number - 1) * 2
-        // If the line ends before the wanted side's move, stay on the other side.
-        val index = (if (wantBlack) listOf(white + 1, white) else listOf(white)).firstOrNull { it < moves.size } ?: return null
-        return match.range.first to "@" + numberedSan(moves.take(index).fold(Position.START) { p, m -> p.play(m) }, moves[index])
+        val positions = moves.runningFold(start) { p, m -> p.play(m) }
+        fun indexOf(black: Boolean) = moves.indices.firstOrNull {
+            positions[it].fullmoveNumber == number && positions[it].whiteToMove != black
+        }
+        // If the line has no move for the wanted side, stay on the other one.
+        val index = (if (wantBlack) listOf(true, false) else listOf(false)).firstNotNullOfOrNull(::indexOf) ?: return null
+        return match.range.first to "@" + numberedSan(positions[index], moves[index])
     }
 
-    /** "@8. Ng4" for the last move of [moves], ready to paste into the theory. */
-    fun markerFor(moves: List<Move>): String? {
+    /** "@8. Ng4" for the last move of [moves] played from [start], ready to paste into the theory. */
+    fun markerFor(start: Position, moves: List<Move>): String? {
         val last = moves.lastOrNull() ?: return null
-        val before = moves.dropLast(1).fold(Position.START) { p, m -> p.play(m) }
+        val before = moves.dropLast(1).fold(start) { p, m -> p.play(m) }
         return "@" + numberedSan(before, last)
     }
 }
