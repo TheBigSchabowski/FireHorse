@@ -50,6 +50,10 @@ installieren“ erlauben.
   ziehen malt einen Pfeil, loslassen auf demselben Feld kreist es ein; am Mac geht auch die rechte
   Maustaste. Derselbe Pfeil nochmal nimmt ihn wieder weg, und mit dem nächsten Zug oder der
   nächsten Berührung des Bretts ist alles wieder sauber. Gilt im Editor wie beim Üben.
+- **Zeichenmodus (vor allem fürs Handy):** dreimal schnell aufs Brett tippen. Ein grüner Rahmen
+  zeigt den Modus an; jetzt kreist Antippen ein Feld ein (nochmal tippen nimmt es weg), Ziehen von
+  Feld zu Feld malt einen Pfeil, und Züge sind gesperrt. „Löschen“ in der Leiste oben wischt alles
+  weg, „Fertig“ oder nochmal dreimal tippen beendet den Modus. Gezeichnetes wird nicht gespeichert.
 - Während eines Puzzles: **Zielstellung zeigen** als Hilfe, **↺ Nochmal von vorn**. Ein Zug aus
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.

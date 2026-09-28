@@ -3,15 +3,19 @@ package repertoire.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +28,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
@@ -62,6 +67,7 @@ private val RIGHT = Color(0x9955C255)
 private val WRONG = Color(0x99E04A4A)
 private val TARGET_DOT = Color(0x40000000)
 private val MARK = Color(0xCC15781B)
+private val DRAW_BAR = Color(0xE0151515)
 
 /** Something drawn on the board: a circle around a square when [from] == [to], else an arrow. */
 private data class BoardMark(val from: Int, val to: Int)
@@ -84,6 +90,10 @@ private fun piecePainter(piece: Char): Painter = painterResource(PIECES.getValue
  * Holding a square (or the right mouse button) draws on the board like on lichess: dragging to
  * another square makes an arrow, letting go on the same square circles it. The same mark drawn
  * twice disappears again, as does everything once a move is played or the board is touched.
+ *
+ * Three quick taps switch to drawing mode, which is easier on a phone than holding a square: every
+ * tap circles a square and every drag draws an arrow, and no moves are made until three taps (or
+ * „Fertig“) switch it off again. Nothing drawn is saved.
  */
 @Composable
 fun ChessBoard(
@@ -101,6 +111,13 @@ fun ChessBoard(
     // Drawn marks belong to the position they were drawn in, so a move wipes the board clean.
     var drawn by remember(position) { mutableStateOf(emptyList<BoardMark>()) }
     var drawing by remember(position) { mutableStateOf<BoardMark?>(null) }
+    var drawMode by remember { mutableStateOf(false) }
+
+    // Counting quick taps for the triple tap that switches drawing mode on and off.
+    var taps by remember { mutableStateOf(0) }
+    var lastTapUp by remember { mutableStateOf(0L) }
+    // What was drawn before the first of those taps: the taps themselves should leave no trace.
+    var beforeTaps by remember { mutableStateOf(emptyList<BoardMark>()) }
 
     fun movesFrom(sq: Int) = position.legalMoves().filter { it.from == sq }
 
@@ -139,12 +156,34 @@ fun ChessBoard(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val sq = squareOf(down.position) ?: return@awaitEachGesture
+                    val before = drawn
 
-                    /** Follows the pointer until it is lifted and keeps the mark it drew. */
-                    suspend fun AwaitPointerEventScope.drawMark() {
+                    /**
+                     * Counts a quick tap; the third in a row switches drawing mode and undoes what
+                     * the taps did on the way. Returns true if it did.
+                     */
+                    fun tapped(upTime: Long): Boolean {
+                        taps = if (taps > 0 && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis) taps + 1 else 1
+                        lastTapUp = upTime
+                        if (taps == 1) beforeTaps = before
+                        if (taps < 3) return false
+                        taps = 0
+                        drawMode = !drawMode
+                        drawn = beforeTaps
+                        selected = null
+                        dragFrom = null
+                        return true
+                    }
+
+                    /**
+                     * Follows the pointer until it is lifted and keeps the mark it drew. Returns when
+                     * it was lifted if that was a quick tap on the same square, otherwise null.
+                     */
+                    suspend fun AwaitPointerEventScope.drawMark(): Long? {
                         selected = null
                         dragFrom = null
                         var to = sq
+                        var upTime = 0L
                         drawing = BoardMark(sq, sq)
                         while (true) {
                             val event = awaitPointerEvent()
@@ -152,16 +191,26 @@ fun ChessBoard(
                             squareOf(change.position)?.let { to = it }
                             drawing = BoardMark(sq, to)
                             change.consume()
-                            if (!change.pressed) break
+                            if (!change.pressed) {
+                                upTime = change.uptimeMillis
+                                break
+                            }
                         }
                         drawing = null
                         val mark = BoardMark(sq, to)
                         drawn = if (mark in drawn) drawn - mark else drawn + mark
+                        return upTime.takeIf { to == sq && it - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis }
                     }
 
                     // Right mouse button: straight to drawing, as on lichess.
                     if (currentEvent.buttons.isSecondaryPressed) {
                         drawMark()
+                        return@awaitEachGesture
+                    }
+
+                    // Drawing mode: a tap circles, a drag draws an arrow, nothing moves.
+                    if (drawMode) {
+                        drawMark()?.let(::tapped)
                         return@awaitEachGesture
                     }
 
@@ -175,12 +224,14 @@ fun ChessBoard(
                     // The piece is only picked up once the finger really moves, so holding it
                     // still to draw does not drag it around first.
                     var release: Offset? = null
+                    var releaseTime = 0L
                     val heldDown = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull
                             if (!change.pressed) {
                                 release = change.position
+                                releaseTime = change.uptimeMillis
                                 return@withTimeoutOrNull
                             }
                             if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
@@ -199,6 +250,7 @@ fun ChessBoard(
                     }
 
                     drawn = emptyList()
+                    if (release != null && tapped(releaseTime)) return@awaitEachGesture
                     if (!movable) {
                         selected = null
                         return@awaitEachGesture
@@ -272,12 +324,17 @@ fun ChessBoard(
                 }
             }
 
-            if (drawn.isNotEmpty() || drawing != null) {
+            if (drawn.isNotEmpty() || drawing != null || drawMode) {
                 Canvas(Modifier.fillMaxSize()) {
                     val centre = { sq: Int -> topLeft(sq) + Offset(squarePx / 2, squarePx / 2) }
                     for (mark in drawn + listOfNotNull(drawing)) drawMark(mark, centre, squarePx)
+                    if (drawMode) {
+                        val frame = squarePx * 0.06f
+                        drawRect(MARK, Offset(frame / 2, frame / 2), Size(boardPx - frame, boardPx - frame), style = Stroke(frame))
+                    }
                 }
             }
+            if (drawMode) DrawModeBar(squareDp.value, onClear = { drawn = emptyList() }, onDone = { drawMode = false })
 
             val dragging = dragFrom
             val draggedPiece = dragging?.let { position.pieceAt(it) }
@@ -290,6 +347,27 @@ fun ChessBoard(
                 )
             }
         }
+    }
+}
+
+/** Says that drawing mode is on and how to leave it; small enough to cover little of the top rank. */
+@Composable
+private fun BoxScope.DrawModeBar(square: Float, onClear: () -> Unit, onDone: () -> Unit) {
+    val size = (square * 0.2f).coerceIn(10f, 15f).sp
+    Row(
+        Modifier.align(Alignment.TopCenter).padding(top = (square * 0.1f).dp)
+            .background(DRAW_BAR, RoundedCornerShape(50)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("✎ Zeichnen", color = Color.White, fontSize = size, modifier = Modifier.padding(start = 12.dp, end = 6.dp))
+        Text(
+            "Löschen", color = Color(0xFFB0B0B0), fontSize = size,
+            modifier = Modifier.clickable(onClick = onClear).padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+        Text(
+            "Fertig", color = Color(0xFF8BD18E), fontSize = size,
+            modifier = Modifier.clickable(onClick = onDone).padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+        )
     }
 }
 
