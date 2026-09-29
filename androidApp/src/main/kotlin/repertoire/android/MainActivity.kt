@@ -59,11 +59,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // Back leaves a puzzle or the editor instead of closing the app.
+            // Back leaves the editor (which may sit on top of a puzzle), then the puzzle, instead of closing the app.
             BackHandler(enabled = viewModel.session != null || viewModel.editor != null) {
-                if (viewModel.session != null) viewModel.endSession() else viewModel.cancelEditor()
+                if (viewModel.editor != null) viewModel.cancelEditor() else viewModel.endSession()
             }
-            App(viewModel, Modifier.safeDrawingPadding())
+            App(viewModel, Modifier.safeDrawingPadding(), touch = true)
         }
     }
 }

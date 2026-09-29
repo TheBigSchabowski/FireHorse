@@ -69,6 +69,9 @@ class TrainingSession(
     /** Board shown after this many moves of the variant, from a "@8. Ng4" in the theory; null shows the attempt. */
     var preview by mutableStateOf<Int?>(null)
 
+    /** Drawing mode of the board (three taps or Ctrl+B m); ends with the session. */
+    val drawMode = mutableStateOf(false)
+
     /** Single moves do not ask the theory. */
     val gaps: List<TheoryPart.Gap>
         get() = attempt?.takeIf { !it.singleMove }?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
@@ -107,6 +110,9 @@ class EditorState(
     /** The theory field is open (Cmd/Ctrl+T). */
     var showTheory by mutableStateOf(theory.isNotBlank())
 
+    /** Drawing mode of the board (three taps or Ctrl+B m). */
+    val drawMode = mutableStateOf(false)
+
     /** Bumped to move the keyboard focus into the theory field. */
     var focusTheory by mutableIntStateOf(0)
 
@@ -136,7 +142,10 @@ class EditorState(
 }
 
 /** The "PGN/FEN einfügen" dialog: paste the text, read it, then carry on in the editor. */
-class PasteState {
+class PasteState(
+    /** Only for the title and example: what was asked for with Ctrl+B p / f; both are read either way. */
+    val kind: Command? = null,
+) {
     var text by mutableStateOf("")
 
     /** Why the text could not be read, shown under the field. */
@@ -156,6 +165,54 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         private set
 
     val dataLocation: String get() = store.location
+
+    // ---- Shortcuts -----------------------------------------------------------------------
+
+    val shortcutKeys = ShortcutKeys(this)
+
+    /** Ctrl+B was pressed; the next key picks the command. */
+    var prefix by mutableStateOf(false)
+
+    var showShortcuts by mutableStateOf(false)
+
+    /** A short note that disappears by itself, e.g. why a shortcut did nothing. */
+    var flash by mutableStateOf<String?>(null)
+
+    /** Drawing mode of the board on screen: the editor's if one is open, else the puzzle's. */
+    private val drawModeOnScreen get() = editor?.drawMode ?: session?.takeIf { it.attempt != null }?.drawMode
+
+    val drawMode: Boolean get() = drawModeOnScreen?.value == true
+
+    /** An editor with something in it, which a new variant would throw away. */
+    private val editorInUse: Boolean
+        get() = editor?.let { it.moves.isNotEmpty() || it.name.isNotBlank() || it.theory.text.isNotBlank() } == true
+
+    /** Runs a shortcut. It works on every screen; a puzzle stays open underneath the new variant. */
+    fun run(command: Command) {
+        prefix = false
+        if (command == Command.SHORTCUTS) {
+            showShortcuts = !showShortcuts
+            return
+        }
+        showShortcuts = false
+        when (command) {
+            Command.SHORTCUTS -> Unit
+            Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
+                ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
+            Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
+                editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
+                command == Command.NEW_VARIANT -> {
+                    paste = null
+                    newVariant()
+                }
+                else -> paste = PasteState(command)
+            }
+        }
+    }
+
+    /** Shown in the editor when it was opened on top of a puzzle. */
+    private val backToPuzzle: String?
+        get() = if (session != null) "Das Puzzle wartet: nach Speichern oder Abbrechen geht es dort weiter." else null
 
     /** Result of the last export or import, shown on the home screen. */
     var message by mutableStateOf<String?>(null)
@@ -192,6 +249,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             moves = template?.moves?.map(Move::fromUci) ?: emptyList(),
             playWhite = template?.playWhite ?: last?.playWhite ?: true,
             startFen = template?.startFen ?: Position.START_FEN,
+            note = backToPuzzle,
         )
     }
 
@@ -545,7 +603,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             // At move zero, so the line can be walked through and cut where it gets interesting.
             fromStart = true,
             startFen = line.startFen,
-            note = pasteNote(line),
+            note = listOfNotNull(pasteNote(line), backToPuzzle).joinToString(" "),
         )
     }
 

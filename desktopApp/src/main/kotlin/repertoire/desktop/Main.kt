@@ -33,6 +33,8 @@ fun main() = application {
         state = System.getProperty("window.size")?.split("x")?.map { it.toInt().dp }
             ?.let { (w, h) -> rememberWindowState(width = w, height = h) }
             ?: rememberWindowState(width = 1200.dp, height = 820.dp),
+        // Ctrl+B and the key after it, before a focused text field can take them.
+        onPreviewKeyEvent = viewModel.shortcutKeys::handle,
         onKeyEvent = { event ->
             val session = viewModel.session
             val command = event.isMetaPressed || event.isCtrlPressed
@@ -44,6 +46,8 @@ fun main() = application {
                 // field gets them first, so typing in "Theorie" is not affected.
                 viewModel.editor != null && event.key == Key.DirectionLeft -> viewModel.editorStepBack().let { true }
                 viewModel.editor != null && event.key == Key.DirectionRight -> viewModel.editorStepForward().let { true }
+                // A puzzle underneath the editor or a dialog must not be answered blindly.
+                viewModel.editor != null || viewModel.paste != null || viewModel.showShortcuts -> false
                 // Enter checks the theory gaps, then Enter / Space answers "Gut" (or "Weiter" after a mistake).
                 session?.attempt?.finished != true -> false
                 event.key == Key.Enter -> viewModel.confirm().let { true }

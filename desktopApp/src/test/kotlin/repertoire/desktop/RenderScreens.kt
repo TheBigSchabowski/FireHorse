@@ -10,6 +10,7 @@ import repertoire.core.Position
 import repertoire.core.Store
 import repertoire.ui.App
 import repertoire.ui.AppViewModel
+import repertoire.ui.Command
 import java.io.File
 import java.nio.file.Files
 
@@ -27,7 +28,7 @@ fun main() {
             val dir = Files.createTempDirectory("puzzle").toFile()
             val vm = AppViewModel(Store(DirectoryStore(dir))).also(setup)
             val (w, h) = size
-            ImageComposeScene(w * 2, h * 2, Density(2f)) { App(vm) }.use { scene ->
+            ImageComposeScene(w * 2, h * 2, Density(2f)) { App(vm, touch = label == "phone") }.use { scene ->
                 // Images load on the first frames; render a few before taking the picture.
                 repeat(5) { scene.render(it * 20_000_000L) }
                 val png = scene.render(200_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
@@ -129,6 +130,21 @@ fun main() {
         vm.openPaste()
         vm.setPasteText("r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 7")
         vm.applyPaste()
+    }
+    render("kuerzel") { vm ->
+        vm.sample()
+        vm.run(Command.SHORTCUTS)
+    }
+    render("praefix") { vm ->
+        vm.sample()
+        vm.practice(vm.library.variants.last().id)
+        vm.prefix = true
+    }
+    render("puzzle-neue-variante") { vm ->
+        vm.sample()
+        vm.practice(vm.library.variants.last().id)
+        vm.run(Command.NEW_VARIANT)
+        vm.run(Command.DRAW)
     }
     println("Screens in ${out.absolutePath}")
 }

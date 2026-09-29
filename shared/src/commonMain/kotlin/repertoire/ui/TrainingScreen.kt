@@ -106,6 +106,7 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                     interactive = !attempt.finished && preview == null,
                     onMove = vm::submitMove,
                     modifier = modifier,
+                    drawModeState = session.drawMode,
                 )
             },
             top = { Chalkboard(variant.opening, variant.name) },

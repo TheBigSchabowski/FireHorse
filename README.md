@@ -59,6 +59,24 @@ installieren“ erlauben.
   und die Karte kommt bald wieder.
 - Desktop: `Enter` / `Leertaste` = „Gut“ bzw. „Weiter“.
 
+### Kürzel
+
+Am Mac erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die Liste aller Kürzel.
+Am Handy übernimmt das **Pferd** unten rechts: kurz antippen zeigt die Liste, gedrückt halten wählt
+nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab.
+
+| Mac | Handy | |
+|---|---|---|
+| `Strg+B ?` | antippen | Liste aller Kürzel (Einträge sind anklickbar) |
+| `Strg+B m` | 1 s halten | Zeichenmodus an/aus |
+| `Strg+B c` | 2 s halten | Neue Variante |
+| `Strg+B p` | 3 s halten | PGN einfügen |
+| `Strg+B f` | 4 s halten | FEN einfügen |
+
+Das geht auch mitten in einem Puzzle: die neue Variante legt sich darüber, nach Speichern oder
+Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wird dabei nie
+überschrieben.
+
 Gespeichert wird auf dem Mac in `~/Documents/EroeffnungsPuzzle`, auf Android im App-Speicher.
 
 ## Bauen

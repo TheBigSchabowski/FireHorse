@@ -68,6 +68,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                     interactive = true,
                     onMove = vm::editorPlay,
                     modifier = modifier,
+                    drawModeState = e.drawMode,
                 )
             },
             top = { Chalkboard(e.opening, e.name.ifBlank { "Name der Variante" }) },

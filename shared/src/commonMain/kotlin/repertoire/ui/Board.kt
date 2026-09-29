@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -104,6 +105,8 @@ fun ChessBoard(
     interactive: Boolean,
     onMove: (Move) -> Unit,
     modifier: Modifier = Modifier,
+    /** Passed in for the main board, so that Ctrl+B m can switch it from outside. */
+    drawModeState: MutableState<Boolean> = remember { mutableStateOf(false) },
 ) {
     var selected by remember(position) { mutableStateOf<Int?>(null) }
     var dragFrom by remember(position) { mutableStateOf<Int?>(null) }
@@ -111,7 +114,7 @@ fun ChessBoard(
     // Drawn marks belong to the position they were drawn in, so a move wipes the board clean.
     var drawn by remember(position) { mutableStateOf(emptyList<BoardMark>()) }
     var drawing by remember(position) { mutableStateOf<BoardMark?>(null) }
-    var drawMode by remember { mutableStateOf(false) }
+    var drawMode by drawModeState
 
     // Counting quick taps for the triple tap that switches drawing mode on and off.
     var taps by remember { mutableStateOf(0) }

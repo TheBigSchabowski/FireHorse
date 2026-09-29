@@ -36,6 +36,7 @@ fun BoardWithPanel(
                 Column(Modifier.width(380.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                     top()
                     panel()
+                    HorseClearance()
                 }
             }
         } else {
@@ -45,6 +46,7 @@ fun BoardWithPanel(
                 board(Modifier.fillMaxWidth().aspectRatio(1f))
                 Spacer(Modifier.height(12.dp))
                 panel()
+                HorseClearance()
             }
         }
     }

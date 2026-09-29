@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import repertoire.core.Variant
@@ -44,7 +45,6 @@ import repertoire.core.shortDate
 @Composable
 fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
-    vm.paste?.let { PasteDialog(vm, it) }
     Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
         Text("FireHorse", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
@@ -102,10 +102,20 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
+            if (LocalTouch.current) {
+                "Das Pferd unten rechts: antippen zeigt die Kürzel, halten führt sie aus."
+            } else {
+                "Strg+B, dann ? zeigt alle Tastenkürzel."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
             "Gespeichert in: ${vm.dataLocation}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        HorseClearance()
     }
 }
 
@@ -159,11 +169,19 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
  * what comes out of the text is then opened in the editor instead of being saved straight away.
  */
 @Composable
-private fun PasteDialog(vm: AppViewModel, p: PasteState) {
+internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
     val focus = remember { FocusRequester() }
     AlertDialog(
         onDismissRequest = vm::cancelPaste,
-        title = { Text("PGN oder FEN einfügen") },
+        title = {
+            Text(
+                when (p.kind) {
+                    Command.PASTE_PGN -> "PGN einfügen"
+                    Command.PASTE_FEN -> "FEN einfügen"
+                    else -> "PGN oder FEN einfügen"
+                },
+            )
+        },
         text = {
             Column {
                 LaunchedEffect(Unit) { focus.requestFocus() }
@@ -179,11 +197,20 @@ private fun PasteDialog(vm: AppViewModel, p: PasteState) {
                     p.text,
                     vm::setPasteText,
                     label = { Text("PGN / FEN") },
-                    placeholder = { Text("1. e4 c5 2. Nf3 d6 3. d4 cxd4") },
+                    placeholder = {
+                        Text(
+                            if (p.kind == Command.PASTE_FEN) {
+                                "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+                            } else {
+                                "1. e4 c5 2. Nf3 d6 3. d4 cxd4"
+                            },
+                        )
+                    },
                     minLines = 4,
                     maxLines = 8,
                     isError = p.error != null,
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    // The dialog may have a window of its own, which the main window's keys never see.
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent(vm.shortcutKeys::handle),
                 )
                 p.error?.let {
                     Spacer(Modifier.height(8.dp))
