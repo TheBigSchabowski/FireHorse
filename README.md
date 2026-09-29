@@ -1,4 +1,4 @@
-# Eröffnungs-Puzzle
+# FireHorse
 
 Eröffnungen als Puzzle lernen, mit Spaced Repetition, für macOS und Android.
 
@@ -13,8 +13,8 @@ Unter [Releases](../../releases/latest):
 
 | Plattform | Datei | Hinweis |
 |---|---|---|
-| macOS | `EroeffnungsPuzzle_<version>_macos-arm64.dmg` | Apple Silicon |
-| Android | `EroeffnungsPuzzle_<version>_android.apk` | Android 8.0+ |
+| macOS | `FireHorse_<version>_macos-arm64.dmg` | Apple Silicon |
+| Android | `FireHorse_<version>_android.apk` | Android 8.0+ |
 
 **macOS:** DMG öffnen und die App in „Programme“ ziehen. Die App ist nicht mit einem
 Apple-Entwicklerzertifikat signiert, deshalb beim ersten Start: Rechtsklick auf die App →

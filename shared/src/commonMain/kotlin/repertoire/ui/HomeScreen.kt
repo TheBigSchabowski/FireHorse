@@ -46,7 +46,7 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
     vm.paste?.let { PasteDialog(vm, it) }
     Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
-        Text("Eröffnungs-Puzzle", style = MaterialTheme.typography.headlineMedium)
+        Text("FireHorse", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }

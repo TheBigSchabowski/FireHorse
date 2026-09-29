@@ -27,7 +27,7 @@ hdiutil info | awk -v dir="$PWD/" '
 echo "==> Tests, DMG und APK..."
 ./gradlew :shared:desktopTest :desktopApp:packageDmg :androidApp:assembleRelease
 
-DMG="desktopApp/build/compose/binaries/main/dmg/EroeffnungsPuzzle-$VERSION.dmg"
+DMG="desktopApp/build/compose/binaries/main/dmg/FireHorse-$VERSION.dmg"
 APK="androidApp/build/outputs/apk/release/androidApp-release.apk"
 for artifact in "$DMG" "$APK"; do
   [ -s "$artifact" ] || { echo "Build-Artefakt fehlt: $artifact" >&2; exit 1; }
@@ -35,8 +35,8 @@ done
 
 mkdir -p "$RELEASE_DIR"
 rm -f "$RELEASE_DIR"/*
-cp "$DMG" "$RELEASE_DIR/EroeffnungsPuzzle_${VERSION}_macos-arm64.dmg"
-cp "$APK" "$RELEASE_DIR/EroeffnungsPuzzle_${VERSION}_android.apk"
+cp "$DMG" "$RELEASE_DIR/FireHorse_${VERSION}_macos-arm64.dmg"
+cp "$APK" "$RELEASE_DIR/FireHorse_${VERSION}_android.apk"
 (cd "$RELEASE_DIR" && shasum -a 256 *.dmg *.apk > SHA256SUMS.txt)
 echo "==> Fertig:"
 ls -la "$RELEASE_DIR"

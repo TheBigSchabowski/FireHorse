@@ -18,5 +18,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EroeffnungsPuzzle"
+rootProject.name = "FireHorse"
 include(":shared", ":desktopApp", ":androidApp")

@@ -34,7 +34,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
-            packageName = "EroeffnungsPuzzle"
+            packageName = "FireHorse"
             packageVersion = property("app.version") as String
             macOS {
                 bundleID = "de.privat.eroeffnungspuzzle"

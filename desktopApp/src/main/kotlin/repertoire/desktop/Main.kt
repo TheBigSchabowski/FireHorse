@@ -28,7 +28,7 @@ fun main() = application {
     }
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Eröffnungs-Puzzle",
+        title = "FireHorse",
         // -Dwindow.size=393x852 opens at phone size, to check the narrow layout that Android uses.
         state = System.getProperty("window.size")?.split("x")?.map { it.toInt().dp }
             ?.let { (w, h) -> rememberWindowState(width = w, height = h) }
