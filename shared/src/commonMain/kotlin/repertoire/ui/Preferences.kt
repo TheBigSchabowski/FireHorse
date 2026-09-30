@@ -1,5 +1,6 @@
 package repertoire.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -63,7 +65,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus"),
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
     TAP_ZONES("Doppeltippen", "Sechs Bereiche des Bildschirms für Kürzel", touch = true),
-    KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten", touch = false),
+    KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
     DATA("Speichern und Übertragen", "Wo alles liegt, Export und Import"),
     ;
 
@@ -84,13 +86,16 @@ fun PreferencesScreen(vm: AppViewModel, prefs: Prefs, modifier: Modifier = Modif
         }
         // A fresh scroll position for every page, so a help page does not open halfway down.
         key(prefs) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
-                when {
-                    prefs is Prefs.Help && prefs.topic != null -> HelpPage(vm, prefs, touch)
-                    prefs is Prefs.Help -> HelpIndex(vm, touch)
-                    else -> ConfigPage(vm, touch)
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                // Lines and rows stay readable in a wide window instead of stretching across it.
+                Column(Modifier.widthIn(max = 720.dp).padding(24.dp)) {
+                    when {
+                        prefs is Prefs.Help && prefs.topic != null -> HelpPage(vm, prefs, touch)
+                        prefs is Prefs.Help -> HelpIndex(vm, touch)
+                        else -> ConfigPage(vm, touch)
+                    }
+                    HorseClearance()
                 }
-                HorseClearance()
             }
         }
     }
@@ -144,7 +149,15 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
         }
     } else {
         Section("Tastenkürzel", onHelp = { vm.openHelp(HelpTopic.KEYBOARD) }) {
-            Text("Erst Strg+B, dann eine Taste. Strg+B ? zeigt alle.")
+            Hint(
+                "Erst ${settings.prefixLabel}, dann die Taste. Zum Ändern auf eine Taste klicken und die neue drücken " +
+                    "(Esc bricht ab). Ist sie schon vergeben, tauschen die beiden.",
+            )
+            Spacer(Modifier.height(8.dp))
+            KeyRow("Präfix: Strg + …", settings.prefixKey.uppercase(), vm, KeyTarget.Prefix)
+            for (command in Command.entries) KeyRow(command.label, settings.keyOf(command).toString(), vm, KeyTarget.Of(command))
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = vm::resetKeys, enabled = settings.keysChanged) { Text("Standard wiederherstellen") }
         }
     }
     Section("Daten", onHelp = { vm.openHelp(HelpTopic.DATA) }, last = true) {
@@ -161,6 +174,26 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
                 Spacer(Modifier.height(6.dp))
                 Text(it, style = MaterialTheme.typography.bodyMedium)
             }
+        }
+    }
+}
+
+/** One configurable key: a click, then the next key press sets it. */
+@Composable
+private fun KeyRow(label: String, key: String, vm: AppViewModel, target: KeyTarget) {
+    val waiting = vm.keyCapture == target
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f))
+        OutlinedButton(
+            onClick = { vm.keyCapture = if (waiting) null else target },
+            border = BorderStroke(1.dp, if (waiting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+            modifier = Modifier.widthIn(min = 120.dp),
+        ) {
+            Text(
+                if (waiting) "Taste drücken …" else key,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = if (waiting) FontWeight.Normal else FontWeight.Bold,
+            )
         }
     }
 }
@@ -295,7 +328,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                 if (touch) {
                     "Kürzel erreichst du am Handy über das Pferd unten rechts und durch Doppeltippen auf eine freie Stelle."
                 } else {
-                    "Kürzel erreichst du mit Strg+B und einer Taste; Strg+B ? zeigt alle."
+                    "Kürzel erreichst du mit ${settings.prefixLabel} und einer Taste; ${settings.shortcutLabel(Command.SHORTCUTS)} zeigt alle."
                 },
             )
         }
@@ -351,7 +384,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             )
             Bullet(
                 "Zeichenmodus",
-                "dreimal schnell aufs Brett tippen" + (if (touch) "" else " oder Strg+B m") + ". Ein grüner Rahmen zeigt ihn an: " +
+                "dreimal schnell aufs Brett tippen" + (if (touch) "" else " oder ${settings.shortcutLabel(Command.DRAW)}") + ". Ein grüner Rahmen zeigt ihn an: " +
                     "Antippen kreist ein Feld ein, Ziehen malt einen Pfeil, und Züge sind gesperrt. „Löschen“ wischt alles weg, " +
                     "„Fertig“ oder nochmal dreimal tippen beendet ihn.",
             )
@@ -385,8 +418,19 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             ConfigButton(vm, "Bereiche einstellen")
         }
         HelpTopic.KEYBOARD -> {
-            Para("Erst Strg+B, dann eine Taste – wie bei tmux. Geht überall, auch mitten in einem Puzzle: danach geht es dort weiter.")
-            for (command in Command.entries) ShortcutRow("Strg+B ${command.key}", command.label, null)
+            Para(
+                "Erst ${settings.prefixLabel}, dann eine Taste – wie bei tmux. Geht überall, auch mitten in einem Puzzle: " +
+                    "danach geht es dort weiter. Die Taste selbst landet nie in einem Textfeld.",
+            )
+            for (command in Command.entries) ShortcutRow(settings.shortcutLabel(command), command.label, null)
+            SubHeading("Tasten ändern")
+            Para(
+                "Passt ein Buchstabe nicht, lässt er sich in der Konfiguration ändern: auf die Taste klicken, die neue drücken. " +
+                    "Erlaubt sind Buchstaben, Ziffern und ?; ist die Taste schon vergeben, tauschen die beiden. " +
+                    "Auch das B nach Strg lässt sich durch einen anderen Buchstaben ersetzen. " +
+                    "Die Liste der Kürzel kommt immer auch mit ? oder h, falls man die eigene Belegung vergessen hat.",
+            )
+            ConfigButton(vm, "Tasten ändern")
             SubHeading("Weitere Tasten")
             for ((keys, label) in OTHER_KEYS) ShortcutRow(keys, label, null)
         }

@@ -15,6 +15,10 @@ data class Settings(
      * rows, read like a book – top left, top right, middle left, …
      */
     val tapZones: List<String> = listOf("SHORTCUTS", "DRAW", "NEW_VARIANT", "SETTINGS", "PASTE_PGN", "PASTE_FEN"),
+    /** The letter that goes with Ctrl to start a shortcut on the keyboard. */
+    val prefixKey: String = "b",
+    /** Keys changed from their default, by `Command` name; the rest keep theirs. */
+    val keys: Map<String, String> = emptyMap(),
 )
 
 @Serializable

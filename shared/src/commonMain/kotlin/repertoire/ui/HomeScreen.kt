@@ -92,7 +92,7 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 "Das Pferd unten rechts und zweimal Tippen auf eine freie Stelle führen Kürzel aus. " +
                     "Wie alles funktioniert, steht unter Einstellungen → Hilfe."
             } else {
-                "Strg+B, dann ? zeigt alle Tastenkürzel. Wie alles funktioniert, steht unter Einstellungen → Hilfe."
+                "${vm.library.settings.shortcutLabel(Command.SHORTCUTS)} zeigt alle Tastenkürzel. Wie alles funktioniert, steht unter Einstellungen → Hilfe."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

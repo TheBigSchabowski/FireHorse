@@ -9,6 +9,10 @@ import repertoire.core.Position
 import repertoire.core.Store
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
+import repertoire.ui.KeyTarget
+import repertoire.ui.keyOf
+import repertoire.ui.keysChanged
+import repertoire.ui.prefixLabel
 import repertoire.ui.formatSeconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -171,5 +175,74 @@ class ShortcutsTest {
         assertEquals("1,5 s", formatSeconds(1500))
         assertEquals("0,75 s", formatSeconds(750))
         assertEquals("12 s", formatSeconds(12_000))
+    }
+
+    @Test
+    fun aCommandCanGetAnotherKey() {
+        val vm = app()
+        vm.keyCapture = KeyTarget.Of(Command.PASTE_PGN)
+        // The key press that sets it is swallowed and runs nothing.
+        assertEquals(listOf(true, true, true), vm.key(Key.G, 'g'))
+        assertNull(vm.keyCapture)
+        assertEquals('g', vm.library.settings.keyOf(Command.PASTE_PGN))
+        vm.ctrlB()
+        vm.key(Key.G, 'g')
+        assertEquals(Command.PASTE_PGN, vm.paste?.kind)
+        vm.cancelPaste()
+        // p is free now.
+        vm.ctrlB()
+        vm.key(Key.P, 'p')
+        assertNull(vm.paste)
+        assertNotNull(vm.flash)
+    }
+
+    @Test
+    fun aTakenKeyIsSwapped() {
+        val vm = app()
+        vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'f')
+        val settings = vm.library.settings
+        assertEquals('f', settings.keyOf(Command.PASTE_PGN))
+        assertEquals('p', settings.keyOf(Command.PASTE_FEN))
+        // Back to its own key: nothing is stored as changed any more.
+        vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'p')
+        assertEquals(emptyMap(), vm.library.settings.keys)
+        assertFalse(vm.library.settings.keysChanged)
+    }
+
+    @Test
+    fun thePrefixLetterCanBeChanged() {
+        val vm = app()
+        vm.keyCapture = KeyTarget.Prefix
+        vm.key(Key.K, '\u000b', ctrl = true)
+        assertEquals("Strg+K", vm.library.settings.prefixLabel)
+        vm.ctrlB()
+        assertFalse(vm.prefix)
+        vm.key(Key.K, '\u000b', ctrl = true)
+        assertTrue(vm.prefix)
+        vm.key(Key.C, 'c')
+        assertNotNull(vm.editor)
+        vm.resetKeys()
+        assertEquals("Strg+B", vm.library.settings.prefixLabel)
+    }
+
+    @Test
+    fun onlyLettersDigitsAndQuestionMarkCanBeKeys() {
+        val vm = app()
+        vm.keyCapture = KeyTarget.Of(Command.DRAW)
+        vm.key(Key.Tab, '\t')
+        assertEquals(KeyTarget.Of(Command.DRAW), vm.keyCapture)
+        assertNotNull(vm.flash)
+        vm.key(Key.Escape, '\u001b')
+        assertNull(vm.keyCapture)
+        assertEquals('m', vm.library.settings.keyOf(Command.DRAW))
+    }
+
+    @Test
+    fun theListStaysReachableWithQuestionMark() {
+        val vm = app()
+        vm.setKey(KeyTarget.Of(Command.SHORTCUTS), 'l')
+        vm.ctrlB()
+        vm.key(Key.Slash, '?')
+        assertTrue(vm.showShortcuts)
     }
 }

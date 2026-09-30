@@ -221,7 +221,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     // ---- Preferences ---------------------------------------------------------------------
 
     /** The preferences, on top of whatever is open underneath; null when closed. */
-    var prefs by mutableStateOf<Prefs?>(null)
+    var prefs: Prefs?
+        get() = prefsState
+        set(value) {
+            if (value != Prefs.Config) keyCapture = null
+            prefsState = value
+        }
+    private var prefsState by mutableStateOf<Prefs?>(null)
 
     fun openConfig() {
         prefs = Prefs.Config
@@ -239,6 +245,26 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             p is Prefs.Help && p.topic != null -> if (p.fromConfig) Prefs.Config else Prefs.Help()
             else -> null
         }
+    }
+
+    /** Waiting for a key press in the configuration, to set it as the new key of this. */
+    var keyCapture by mutableStateOf<KeyTarget?>(null)
+
+    fun setKey(target: KeyTarget, key: Char) {
+        keyCapture = null
+        updateLibrary { lib ->
+            lib.copy(
+                settings = when (target) {
+                    KeyTarget.Prefix -> lib.settings.copy(prefixKey = key.toString())
+                    is KeyTarget.Of -> lib.settings.withKey(target.command, key)
+                },
+            )
+        }
+    }
+
+    fun resetKeys() {
+        keyCapture = null
+        updateLibrary { it.copy(settings = it.settings.copy(prefixKey = "b", keys = emptyMap())) }
     }
 
     fun setTapZonesOn(on: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(tapZonesOn = on)) }

@@ -12,6 +12,7 @@ import repertoire.ui.App
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
 import repertoire.ui.HelpTopic
+import repertoire.ui.KeyTarget
 import java.io.File
 import java.nio.file.Files
 
@@ -150,6 +151,12 @@ fun main() {
     render("einstellungen") { vm ->
         vm.sample()
         vm.openConfig()
+    }
+    render("einstellungen-tasten") { vm ->
+        vm.sample()
+        vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'g')
+        vm.openConfig()
+        vm.keyCapture = KeyTarget.Of(Command.PASTE_FEN)
     }
     render("hilfe") { vm ->
         vm.sample()

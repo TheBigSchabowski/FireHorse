@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
+import repertoire.core.Settings
 import repertoire.core.currentTimeMillis
 import repertoire.shared.resources.Res
 import repertoire.shared.resources.wn
@@ -81,7 +82,8 @@ fun formatSeconds(ms: Long): String {
 }
 
 /**
- * What can be reached from anywhere: with Ctrl+B and then [key] on the keyboard; on a phone by
+ * What can be reached from anywhere: with Ctrl+B and then [key] on the keyboard (both can be changed);
+ * on a phone by
  * holding the horse button for [holdSteps] steps (a short tap opens the list; null: not on the
  * horse) or by a double tap into a screen zone ([TapZone]). How long a step is, and which zone runs
  * what, is set in the configuration.
@@ -123,9 +125,59 @@ internal val OTHER_TOUCH = listOf(
     "2× tippen" to "auf eine freie Stelle: das Kürzel dieses Bereichs (siehe Einstellungen)",
 )
 
+/** The key [command] has on the keyboard, after the prefix: its own unless changed in the configuration. */
+fun Settings.keyOf(command: Command): Char = keys[command.name]?.firstOrNull() ?: command.key
+
+/** "Strg+B", or whichever letter was chosen instead of the B. */
+val Settings.prefixLabel: String get() = "Strg+" + prefixKey.uppercase()
+
+/** "Strg+B p": the whole shortcut of [command] on the keyboard. */
+fun Settings.shortcutLabel(command: Command): String = "$prefixLabel ${keyOf(command)}"
+
+/** The keys differ from the defaults. */
+val Settings.keysChanged: Boolean get() = prefixKey != "b" || Command.entries.any { keyOf(it) != it.key }
+
+/** What a key can be set to: letters, digits and "?". */
+fun isShortcutKey(c: Char) = c in 'a'..'z' || c in '0'..'9' || c == '?'
+
 /**
- * Tmux-style prefix keys: Ctrl+B, then a letter. The keys that belong to a shortcut never reach a
- * text field, so "p" is not typed into the theory while it has the focus.
+ * [command] on [key] from now on. Keys stay unique: a command that had [key] gets the old key of
+ * [command] in exchange.
+ */
+fun Settings.withKey(command: Command, key: Char): Settings {
+    val old = keyOf(command)
+    val other = Command.entries.firstOrNull { it != command && keyOf(it) == key }
+    val changed = keys + (command.name to key.toString()) + (other?.let { mapOf(it.name to old.toString()) } ?: emptyMap())
+    // Only what differs from the default is kept, so a later change of a default still reaches it.
+    return copy(keys = changed.filter { (name, k) -> Command.entries.firstOrNull { it.name == name }?.key?.toString() != k })
+}
+
+/** What the next key press sets in the configuration: the prefix letter or the key of a command. */
+sealed interface KeyTarget {
+    data object Prefix : KeyTarget
+
+    data class Of(val command: Command) : KeyTarget
+}
+
+/** Letters and digits by their key, for when Ctrl hides the typed character. */
+private val KEY_CHARS: Map<Key, Char> = listOf(
+    Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M,
+    Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z,
+).mapIndexed { i, key -> key to 'a' + i }.toMap() + listOf(
+    Key.Zero, Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine,
+).mapIndexed { i, key -> key to '0' + i }.toMap()
+
+/**
+ * The character of a key press: what it types if that is a letter, digit or "?" (so the layout
+ * decides, e.g. "?" is Shift+ß on a German keyboard), otherwise the letter printed on the key.
+ */
+private fun charOf(event: KeyEvent): Char? =
+    event.utf16CodePoint.toChar().lowercaseChar().takeIf(::isShortcutKey) ?: KEY_CHARS[event.key]
+
+/**
+ * Tmux-style prefix keys: Ctrl+B, then a letter; both can be changed in the configuration. The keys
+ * that belong to a shortcut never reach a text field, so "p" is not typed into the theory while it
+ * has the focus.
  */
 class ShortcutKeys(private val vm: AppViewModel) {
     /** A key that was used for a shortcut: its typed character and its release are swallowed too. */
@@ -145,8 +197,27 @@ class ShortcutKeys(private val vm: AppViewModel) {
             }
         }
         if (event.type != KeyEventType.KeyDown) return false
+        val settings = vm.library.settings
 
-        if (event.key == Key.B && event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+        // Setting a key in the configuration: the next key press is the new one.
+        vm.keyCapture?.let { target ->
+            if (event.key in MODIFIERS) return false
+            swallow = event.key
+            if (event.key == Key.Escape) {
+                vm.keyCapture = null
+                return true
+            }
+            // The prefix goes with Ctrl, which hides the typed character: the key tells the letter.
+            val char = if (target == KeyTarget.Prefix) KEY_CHARS[event.key]?.takeIf { it in 'a'..'z' } else charOf(event)
+            if (char == null) {
+                vm.flash = if (target == KeyTarget.Prefix) "Für Strg+… geht nur ein Buchstabe." else "Nur Buchstaben, Ziffern oder ?."
+            } else {
+                vm.setKey(target, char)
+            }
+            return true
+        }
+
+        if (KEY_CHARS[event.key] == settings.prefixKey.firstOrNull() && event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
             vm.prefix = !vm.prefix
             swallow = event.key
             return true
@@ -156,17 +227,15 @@ class ShortcutKeys(private val vm: AppViewModel) {
         vm.prefix = false
         swallow = event.key
         if (event.key == Key.Escape) return true
-        val command = when (event.key) {
-            Key.P -> Command.PASTE_PGN
-            Key.F -> Command.PASTE_FEN
-            Key.C -> Command.NEW_VARIANT
-            Key.M -> Command.DRAW
-            Key.S -> Command.SETTINGS
-            Key.H, Key.Slash -> Command.SHORTCUTS
-            // "?" sits on different keys depending on the layout (Shift+ß on a German keyboard).
-            else -> Command.SHORTCUTS.takeIf { event.utf16CodePoint == '?'.code }
+        val char = charOf(event)
+        val command = Command.entries.firstOrNull { settings.keyOf(it) == char }
+            // The list stays reachable with ? and h even when its key was changed.
+            ?: Command.SHORTCUTS.takeIf { char == '?' || char == 'h' || event.key == Key.Slash }
+        if (command != null) {
+            vm.run(command)
+        } else {
+            vm.flash = "${settings.prefixLabel}, dann ${settings.keyOf(Command.SHORTCUTS)} zeigt, welche Kürzel es gibt."
         }
-        if (command != null) vm.run(command) else vm.flash = "Strg+B, dann ? zeigt, welche Kürzel es gibt."
         return true
     }
 
@@ -196,7 +265,8 @@ fun BoxScope.ShortcutOverlay(vm: AppViewModel) {
             Spacer(Modifier.height(8.dp))
         }
         if (vm.prefix) {
-            Pill("Strg+B …   " + Command.entries.joinToString("  ·  ") { "${it.key} ${it.short}" })
+            val settings = vm.library.settings
+            Pill("${settings.prefixLabel} …   " + Command.entries.joinToString("  ·  ") { "${settings.keyOf(it)} ${it.short}" })
         }
     }
     if (touch) HorseButton(vm.library.settings.holdStepMs, vm::run, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
@@ -234,7 +304,8 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
                         "Kurz tippen öffnet diese Liste, gedrückt halten wählt nach der Zeit – beim Halten steht daneben, was beim Loslassen passiert. Wegziehen bricht ab. " +
                             "Alles Weitere erklärt die Hilfe in den Einstellungen."
                     } else {
-                        "Erst Strg+B drücken, dann die Taste. Geht überall, auch mitten in einem Puzzle: danach geht es dort weiter."
+                        "Erst ${vm.library.settings.prefixLabel} drücken, dann die Taste. Geht überall, auch mitten in einem Puzzle: danach geht es dort weiter. " +
+                            "Die Tasten lassen sich in den Einstellungen ändern."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -243,7 +314,7 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
                 for (command in Command.entries.filter { it != Command.SHORTCUTS }) {
                     val settings = vm.library.settings
                     val key = when {
-                        !touch -> "Strg+B ${command.key}"
+                        !touch -> settings.shortcutLabel(command)
                         command.holdSteps != null -> formatSeconds(command.holdSteps.toLong() * settings.holdStepMs) + " halten"
                         else -> settings.zoneOf(command)?.let { "2× ${it.short}" } ?: ""
                     }

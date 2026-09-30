@@ -59,12 +59,15 @@ installieren“ erlauben.
   und die Karte kommt bald wieder.
 - Desktop: `Enter` / `Leertaste` = „Gut“ bzw. „Weiter“.
 - **Einstellungen** (oben auf der Startseite) haben zwei Reiter: **Konfiguration** (neue Varianten
-  pro Tag, Pferd, Doppeltippen, Export/Import) und **Hilfe**, die alles hier Beschriebene in der App
+  pro Tag, am Mac die Tastenbelegung, am Handy Pferd und Doppeltippen, Export/Import) und **Hilfe**, die alles hier Beschriebene in der App
   erklärt. „Hilfe“ neben jedem Bereich der Konfiguration öffnet direkt die passende Seite.
 
 ### Kürzel
 
 Am Mac erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die Liste aller Kürzel.
+Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
+(auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
+Die Liste kommt immer auch mit `?` oder `h`.
 Am Handy übernimmt das **Pferd** unten rechts: kurz antippen zeigt die Liste, gedrückt halten wählt
 nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab. Wie lang ein Schritt
 dauert (0,5 bis 3 s, Standard 1 s), steht in den Einstellungen.
