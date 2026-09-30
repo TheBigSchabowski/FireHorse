@@ -9,6 +9,7 @@ import repertoire.core.Position
 import repertoire.core.Store
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
+import repertoire.ui.formatSeconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -153,5 +154,22 @@ class ShortcutsTest {
         assertEquals(Command.PASTE_PGN, Command.forHold(3000))
         assertEquals(Command.PASTE_FEN, Command.forHold(4100))
         assertEquals(Command.PASTE_FEN, Command.forHold(12_000))
+    }
+
+    @Test
+    fun theHoldStepCanBeSlower() {
+        assertEquals(Command.SHORTCUTS, Command.forHold(1200, stepMs = 1500))
+        assertEquals(Command.DRAW, Command.forHold(1500, stepMs = 1500))
+        assertEquals(Command.NEW_VARIANT, Command.forHold(4000, stepMs = 1500))
+        assertEquals(Command.PASTE_PGN, Command.forHold(4500, stepMs = 1500))
+        assertEquals(Command.PASTE_FEN, Command.forHold(6000, stepMs = 1500))
+    }
+
+    @Test
+    fun secondsAreWrittenTheGermanWay() {
+        assertEquals("1 s", formatSeconds(1000))
+        assertEquals("1,5 s", formatSeconds(1500))
+        assertEquals("0,75 s", formatSeconds(750))
+        assertEquals("12 s", formatSeconds(12_000))
     }
 }

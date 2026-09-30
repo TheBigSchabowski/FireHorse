@@ -46,7 +46,11 @@ import repertoire.core.shortDate
 fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
     Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
-        Text("FireHorse", style = MaterialTheme.typography.headlineMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("FireHorse", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { vm.openHelp() }) { Text("Hilfe") }
+            TextButton(onClick = vm::openConfig) { Text("Einstellungen") }
+        }
         Spacer(Modifier.height(16.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }
@@ -79,39 +83,17 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(12.dp))
         }
 
-        Spacer(Modifier.height(8.dp))
-        Text("Neue Varianten pro Tag")
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { vm.setNewPerDay(vm.library.settings.newPerDay - 5) }) { Text("−5") }
-            Text("${vm.library.settings.newPerDay}", modifier = Modifier.padding(horizontal = 16.dp))
-            OutlinedButton(onClick = { vm.setNewPerDay(vm.library.settings.newPerDay + 5) }) { Text("+5") }
+        vm.message?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
         }
-        if (vm.canTransfer) {
-            Spacer(Modifier.height(20.dp))
-            Text("Varianten und Lernstand übertragen")
-            Spacer(Modifier.height(6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.export() }, enabled = vm.library.variants.isNotEmpty()) { Text("Alle exportieren") }
-                OutlinedButton(onClick = vm::import) { Text("Importieren") }
-            }
-            vm.message?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(it, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
         Text(
             if (LocalTouch.current) {
-                "Das Pferd unten rechts: antippen zeigt die Kürzel, halten führt sie aus."
+                "Das Pferd unten rechts und zweimal Tippen auf eine freie Stelle führen Kürzel aus. " +
+                    "Wie alles funktioniert, steht unter Einstellungen → Hilfe."
             } else {
-                "Strg+B, dann ? zeigt alle Tastenkürzel."
+                "Strg+B, dann ? zeigt alle Tastenkürzel. Wie alles funktioniert, steht unter Einstellungen → Hilfe."
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "Gespeichert in: ${vm.dataLocation}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

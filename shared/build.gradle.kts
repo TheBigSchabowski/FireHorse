@@ -36,6 +36,10 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // Skia for the tests that feed taps into an off-screen Compose scene.
+        named("desktopTest").dependencies {
+            implementation(compose.desktop.currentOs)
+        }
     }
 }
 

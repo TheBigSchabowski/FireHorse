@@ -40,6 +40,8 @@ fun main() = application {
             val command = event.isMetaPressed || event.isCtrlPressed
             when {
                 event.type != KeyEventType.KeyDown -> false
+                // Escape steps back out of the preferences; the screens underneath stay out of reach.
+                viewModel.prefs != null -> (event.key == Key.Escape).also { if (it) viewModel.prefsBack() }
                 // Cmd/Ctrl+T opens the theory field while entering a variant.
                 command && event.key == Key.T && viewModel.editor != null -> viewModel.toggleTheory().let { true }
                 // Arrow keys step through the moves of the variant being edited. A focused text

@@ -11,6 +11,7 @@ import repertoire.core.Store
 import repertoire.ui.App
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
+import repertoire.ui.HelpTopic
 import java.io.File
 import java.nio.file.Files
 
@@ -145,6 +146,23 @@ fun main() {
         vm.practice(vm.library.variants.last().id)
         vm.run(Command.NEW_VARIANT)
         vm.run(Command.DRAW)
+    }
+    render("einstellungen") { vm ->
+        vm.sample()
+        vm.openConfig()
+    }
+    render("hilfe") { vm ->
+        vm.sample()
+        vm.openHelp()
+    }
+    render("hilfe-pferd") { vm ->
+        vm.sample()
+        vm.openConfig()
+        vm.openHelp(HelpTopic.HORSE)
+    }
+    render("hilfe-doppeltippen") { vm ->
+        vm.sample()
+        vm.openHelp(HelpTopic.TAP_ZONES)
     }
     println("Screens in ${out.absolutePath}")
 }

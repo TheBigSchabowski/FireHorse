@@ -195,8 +195,11 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             return
         }
         showShortcuts = false
+        // Everything else happens on the screen underneath, so the preferences make way.
+        if (command != Command.SETTINGS) prefs = null
         when (command) {
             Command.SHORTCUTS -> Unit
+            Command.SETTINGS -> prefs = if (prefs == null) Prefs.Config else null
             Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
                 ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
             Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
@@ -209,6 +212,38 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             }
         }
     }
+
+    /** A double tap into [zone] on a phone. */
+    fun tapZone(zone: TapZone) {
+        library.settings.commandAt(zone)?.let(::run)
+    }
+
+    // ---- Preferences ---------------------------------------------------------------------
+
+    /** The preferences, on top of whatever is open underneath; null when closed. */
+    var prefs by mutableStateOf<Prefs?>(null)
+
+    fun openConfig() {
+        prefs = Prefs.Config
+    }
+
+    /** The help: the list of topics, or with [topic] its page. */
+    fun openHelp(topic: HelpTopic? = null) {
+        prefs = Prefs.Help(topic, fromConfig = prefs == Prefs.Config)
+    }
+
+    /** One step back: from a help page to where it was opened from, otherwise closed. */
+    fun prefsBack() {
+        val p = prefs
+        prefs = when {
+            p is Prefs.Help && p.topic != null -> if (p.fromConfig) Prefs.Config else Prefs.Help()
+            else -> null
+        }
+    }
+
+    fun setTapZonesOn(on: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(tapZonesOn = on)) }
+
+    fun setTapZone(zone: TapZone, command: Command?) = updateLibrary { it.copy(settings = it.settings.withZone(zone, command)) }
 
     /** Shown in the editor when it was opened on top of a puzzle. */
     private val backToPuzzle: String?
@@ -236,6 +271,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     fun setNewPerDay(value: Int) = updateLibrary { it.copy(settings = it.settings.copy(newPerDay = value.coerceIn(0, 500))) }
+
+    fun setHoldStep(ms: Int) = updateLibrary { it.copy(settings = it.settings.copy(holdStepMs = ms.coerceIn(HOLD_STEP_MIN, HOLD_STEP_MAX))) }
 
     // ---- Editor --------------------------------------------------------------------------
 

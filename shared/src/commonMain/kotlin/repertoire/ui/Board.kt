@@ -159,6 +159,8 @@ fun ChessBoard(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val sq = squareOf(down.position) ?: return@awaitEachGesture
+                    // Taps on the board are the board's, not a double tap into a screen zone.
+                    down.consume()
                     val before = drawn
 
                     /**

@@ -58,20 +58,30 @@ installieren“ erlauben.
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.
 - Desktop: `Enter` / `Leertaste` = „Gut“ bzw. „Weiter“.
+- **Einstellungen** (oben auf der Startseite) haben zwei Reiter: **Konfiguration** (neue Varianten
+  pro Tag, Pferd, Doppeltippen, Export/Import) und **Hilfe**, die alles hier Beschriebene in der App
+  erklärt. „Hilfe“ neben jedem Bereich der Konfiguration öffnet direkt die passende Seite.
 
 ### Kürzel
 
 Am Mac erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die Liste aller Kürzel.
 Am Handy übernimmt das **Pferd** unten rechts: kurz antippen zeigt die Liste, gedrückt halten wählt
-nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab.
+nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab. Wie lang ein Schritt
+dauert (0,5 bis 3 s, Standard 1 s), steht in den Einstellungen.
+
+**Doppeltippen (Handy):** Der Bildschirm ist in sechs Bereiche geteilt (zwei Spalten, drei Reihen).
+Zweimal schnell auf eine freie Stelle tippen – kein Knopf, kein Textfeld, nicht das Brett – führt
+das Kürzel dieses Bereichs aus. Welcher Bereich was macht, lässt sich in den Einstellungen festlegen
+oder ganz ausschalten.
 
 | Mac | Handy | |
 |---|---|---|
 | `Strg+B ?` | antippen | Liste aller Kürzel (Einträge sind anklickbar) |
-| `Strg+B m` | 1 s halten | Zeichenmodus an/aus |
-| `Strg+B c` | 2 s halten | Neue Variante |
-| `Strg+B p` | 3 s halten | PGN einfügen |
-| `Strg+B f` | 4 s halten | FEN einfügen |
+| `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus |
+| `Strg+B c` | 2 Schritte halten | Neue Variante |
+| `Strg+B p` | 3 Schritte halten | PGN einfügen |
+| `Strg+B f` | 4 Schritte halten | FEN einfügen |
+| `Strg+B s` | Doppeltippen Mitte rechts | Einstellungen und Hilfe |
 
 Das geht auch mitten in einem Puzzle: die neue Variante legt sich darüber, nach Speichern oder
 Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wird dabei nie

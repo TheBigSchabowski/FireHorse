@@ -59,9 +59,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // Back leaves the editor (which may sit on top of a puzzle), then the puzzle, instead of closing the app.
-            BackHandler(enabled = viewModel.session != null || viewModel.editor != null) {
-                if (viewModel.editor != null) viewModel.cancelEditor() else viewModel.endSession()
+            // Back leaves the preferences, the editor (which may sit on top of a puzzle), then the puzzle,
+            // instead of closing the app.
+            BackHandler(enabled = viewModel.prefs != null || viewModel.session != null || viewModel.editor != null) {
+                when {
+                    viewModel.prefs != null -> viewModel.prefsBack()
+                    viewModel.editor != null -> viewModel.cancelEditor()
+                    else -> viewModel.endSession()
+                }
             }
             App(viewModel, Modifier.safeDrawingPadding(), touch = true)
         }

@@ -68,29 +68,45 @@ fun HorseClearance() {
     if (LocalTouch.current) Spacer(Modifier.height(72.dp))
 }
 
+/** Bounds and increment for [repertoire.core.Settings.holdStepMs]. */
+const val HOLD_STEP_MIN = 500
+const val HOLD_STEP_MAX = 3000
+const val HOLD_STEP_INCREMENT = 250
+
+/** "1 s", "1,5 s", "0,75 s": German decimals, no trailing zeros. */
+fun formatSeconds(ms: Long): String {
+    val whole = ms / 1000
+    val rest = (ms % 1000).toString().padStart(3, '0').trimEnd('0')
+    return if (rest.isEmpty()) "$whole s" else "$whole,$rest s"
+}
+
 /**
- * What can be reached from anywhere: with Ctrl+B and then [key] on the keyboard, or by holding
- * the horse button for [holdSeconds] on a phone (a short tap opens the list).
+ * What can be reached from anywhere: with Ctrl+B and then [key] on the keyboard; on a phone by
+ * holding the horse button for [holdSteps] steps (a short tap opens the list; null: not on the
+ * horse) or by a double tap into a screen zone ([TapZone]). How long a step is, and which zone runs
+ * what, is set in the configuration.
  */
-enum class Command(val key: Char, val label: String, val holdSeconds: Int) {
+enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     SHORTCUTS('?', "Alle Kürzel anzeigen", 0),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
     NEW_VARIANT('c', "Neue Variante", 2),
     PASTE_PGN('p', "PGN einfügen", 3),
     PASTE_FEN('f', "FEN einfügen", 4),
+    SETTINGS('s', "Einstellungen und Hilfe", null),
     ;
 
     companion object {
-        /** The command the horse runs when it is let go after [heldMs]. */
-        fun forHold(heldMs: Long): Command {
-            val seconds = (heldMs / 1000).toInt().coerceAtMost(entries.maxOf { it.holdSeconds })
-            return entries.first { it.holdSeconds == seconds }
+        /** The command the horse runs when it is let go after [heldMs], with steps of [stepMs]. */
+        fun forHold(heldMs: Long, stepMs: Int = 1000): Command {
+            val onHorse = entries.filter { it.holdSteps != null }
+            val steps = (heldMs / stepMs).toInt().coerceAtMost(onHorse.maxOf { it.holdSteps!! })
+            return onHorse.first { it.holdSteps == steps }
         }
     }
 }
 
 /** The other shortcuts, for the list: keyboard, then what they do. */
-private val OTHER_KEYS = listOf(
+internal val OTHER_KEYS = listOf(
     "Cmd/Strg+T" to "Theorie öffnen (beim Eingeben einer Variante)",
     "← / →" to "Züge der Variante durchgehen",
     "Cmd/Strg+Shift+C" to "Auswahl in der Theorie zur Lücke machen",
@@ -101,9 +117,10 @@ private val OTHER_KEYS = listOf(
 )
 
 /** The same on a phone, without a keyboard. */
-private val OTHER_TOUCH = listOf(
+internal val OTHER_TOUCH = listOf(
     "Feld halten" to "Pfeil ziehen oder Feld einkreisen",
     "3× tippen" to "aufs Brett: Zeichenmodus an/aus",
+    "2× tippen" to "auf eine freie Stelle: das Kürzel dieses Bereichs (siehe Einstellungen)",
 )
 
 /**
@@ -144,6 +161,7 @@ class ShortcutKeys(private val vm: AppViewModel) {
             Key.F -> Command.PASTE_FEN
             Key.C -> Command.NEW_VARIANT
             Key.M -> Command.DRAW
+            Key.S -> Command.SETTINGS
             Key.H, Key.Slash -> Command.SHORTCUTS
             // "?" sits on different keys depending on the layout (Shift+ß on a German keyboard).
             else -> Command.SHORTCUTS.takeIf { event.utf16CodePoint == '?'.code }
@@ -181,15 +199,16 @@ fun BoxScope.ShortcutOverlay(vm: AppViewModel) {
             Pill("Strg+B …   " + Command.entries.joinToString("  ·  ") { "${it.key} ${it.short}" })
         }
     }
-    if (touch) HorseButton(vm::run, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
+    if (touch) HorseButton(vm.library.settings.holdStepMs, vm::run, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
 }
 
-private val Command.short: String get() = when (this) {
+internal val Command.short: String get() = when (this) {
     Command.SHORTCUTS -> "Liste"
     Command.DRAW -> "Zeichnen"
     Command.NEW_VARIANT -> "Variante"
     Command.PASTE_PGN -> "PGN"
     Command.PASTE_FEN -> "FEN"
+    Command.SETTINGS -> "Einstellungen"
 }
 
 @Composable
@@ -212,7 +231,8 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     if (touch) {
-                        "Kurz tippen öffnet diese Liste, gedrückt halten wählt nach der Zeit – beim Halten steht daneben, was beim Loslassen passiert. Wegziehen bricht ab."
+                        "Kurz tippen öffnet diese Liste, gedrückt halten wählt nach der Zeit – beim Halten steht daneben, was beim Loslassen passiert. Wegziehen bricht ab. " +
+                            "Alles Weitere erklärt die Hilfe in den Einstellungen."
                     } else {
                         "Erst Strg+B drücken, dann die Taste. Geht überall, auch mitten in einem Puzzle: danach geht es dort weiter."
                     },
@@ -221,7 +241,12 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
                 )
                 Spacer(Modifier.height(12.dp))
                 for (command in Command.entries.filter { it != Command.SHORTCUTS }) {
-                    val key = if (touch) "${command.holdSeconds} s halten" else "Strg+B ${command.key}"
+                    val settings = vm.library.settings
+                    val key = when {
+                        !touch -> "Strg+B ${command.key}"
+                        command.holdSteps != null -> formatSeconds(command.holdSteps.toLong() * settings.holdStepMs) + " halten"
+                        else -> settings.zoneOf(command)?.let { "2× ${it.short}" } ?: ""
+                    }
                     ShortcutRow(key, command.label) { vm.run(command) }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -233,7 +258,7 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
 }
 
 @Composable
-private fun ShortcutRow(key: String, label: String, onClick: (() -> Unit)?) {
+internal fun ShortcutRow(key: String, label: String, onClick: (() -> Unit)?) {
     Row(
         Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
@@ -261,24 +286,24 @@ private fun ShortcutRow(key: String, label: String, onClick: (() -> Unit)?) {
 
 /**
  * The phone's shortcut key: a small knight. A tap opens the list; holding it runs a [Command]
- * after [Command.holdSeconds], and the pill next to it says which one as the ring fills up.
+ * after [Command.holdSteps] steps of [stepMs], and the pill next to it says which one as the ring fills up.
  */
 @Composable
-private fun HorseButton(onCommand: (Command) -> Unit, modifier: Modifier = Modifier) {
+private fun HorseButton(stepMs: Int, onCommand: (Command) -> Unit, modifier: Modifier = Modifier) {
     var held by remember { mutableStateOf<Long?>(null) }
     var cancelled by remember { mutableStateOf(false) }
     val ring = MaterialTheme.colorScheme.primary
-    val last = Command.entries.maxOf { it.holdSeconds }
+    val last = Command.entries.maxOf { it.holdSteps ?: 0 }
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         held?.let { ms ->
-            Pill(if (cancelled) "Loslassen bricht ab" else "Loslassen: " + Command.forHold(ms).label)
+            Pill(if (cancelled) "Loslassen bricht ab" else "Loslassen: " + Command.forHold(ms, stepMs).label)
         }
         Box(
             Modifier.size(52.dp)
                 .background(PILL, CircleShape)
                 .border(1.dp, Color(0xFF4A4A4A), CircleShape)
-                .pointerInput(Unit) {
+                .pointerInput(stepMs) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         down.consume()
@@ -299,7 +324,7 @@ private fun HorseButton(onCommand: (Command) -> Unit, modifier: Modifier = Modif
                         }
                         val ms = held ?: 0L
                         held = null
-                        if (!cancelled) onCommand(Command.forHold(ms))
+                        if (!cancelled) onCommand(Command.forHold(ms, stepMs))
                     }
                 },
             contentAlignment = Alignment.Center,
@@ -307,7 +332,7 @@ private fun HorseButton(onCommand: (Command) -> Unit, modifier: Modifier = Modif
             Image(painterResource(Res.drawable.wn), contentDescription = "Kürzel", modifier = Modifier.size(34.dp))
             held?.let { ms ->
                 Canvas(Modifier.fillMaxSize()) {
-                    val sweep = if (ms >= last * 1000L) 360f else (ms % 1000) / 1000f * 360f
+                    val sweep = if (ms >= last.toLong() * stepMs) 360f else (ms % stepMs).toFloat() / stepMs * 360f
                     val stroke = 3.dp.toPx()
                     drawArc(
                         if (cancelled) Color.Gray else ring, -90f, sweep, useCenter = false,

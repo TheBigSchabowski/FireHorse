@@ -11,18 +11,23 @@ import androidx.compose.ui.Modifier
 
 /**
  * The whole app, shared by the desktop window and the Android activity. [touch] shows the horse
- * button for the shortcuts, which the keyboard reaches with Ctrl+B.
+ * button for the shortcuts and turns on the double-tap zones; the keyboard reaches them with Ctrl+B.
  */
 @Composable
 fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false) {
     MaterialTheme(colorScheme = darkColorScheme()) {
         CompositionLocalProvider(LocalTouch provides touch) {
             Surface(modifier = Modifier.fillMaxSize()) {
-                Box(modifier.fillMaxSize()) {
+                // Double taps on a free spot run the shortcut of that part of the screen.
+                val zones = if (touch && vm.library.settings.tapZonesOn) Modifier.doubleTapZones(vm::tapZone) else Modifier
+                Box(modifier.fillMaxSize().then(zones)) {
                     val session = vm.session
                     val editor = vm.editor
+                    val prefs = vm.prefs
                     vm.paste?.let { PasteDialog(vm, it) }
                     when {
+                        // Preferences and help go on top of everything, which is still there afterwards.
+                        prefs != null -> PreferencesScreen(vm, prefs)
                         // A variant started from inside a puzzle (Ctrl+B c) goes on top of it.
                         editor != null -> EditorScreen(vm, editor)
                         session != null -> TrainingScreen(vm, session)

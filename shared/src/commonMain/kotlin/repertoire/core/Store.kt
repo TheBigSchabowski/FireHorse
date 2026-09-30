@@ -6,6 +6,15 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class Settings(
     val newPerDay: Int = 20,
+    /** How long the horse has to be held per step on a phone: one step for drawing, two for a new variant, … */
+    val holdStepMs: Int = 1000,
+    /** Double taps on a free spot of the phone's screen run a shortcut, by where they land. */
+    val tapZonesOn: Boolean = true,
+    /**
+     * The shortcut (a `Command` name, "" for none) of each of the six zones: two columns and three
+     * rows, read like a book – top left, top right, middle left, …
+     */
+    val tapZones: List<String> = listOf("SHORTCUTS", "DRAW", "NEW_VARIANT", "SETTINGS", "PASTE_PGN", "PASTE_FEN"),
 )
 
 @Serializable
