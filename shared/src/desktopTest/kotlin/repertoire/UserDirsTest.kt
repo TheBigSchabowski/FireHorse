@@ -43,4 +43,12 @@ class UserDirsTest {
         val text = "# XDG_DOCUMENTS_DIR=\"/nope\"\nXDG_DOCUMENTS_DIR=\"${'$'}{HOME}/Docs\"\n"
         assertEquals("/home/linus/Docs", UserDirs.resolve(text, "XDG_DOCUMENTS_DIR", home))
     }
+
+    @Test
+    fun `the HOME variable wins over Javas own guess`() {
+        assertEquals("/home/linus", UserDirs.homeFolder("/home/linus", "/root"))
+        assertEquals("/root", UserDirs.homeFolder(null, "/root"))
+        assertEquals("/root", UserDirs.homeFolder("", "/root"))
+        assertEquals("/root", UserDirs.homeFolder("relative/dir", "/root"))
+    }
 }

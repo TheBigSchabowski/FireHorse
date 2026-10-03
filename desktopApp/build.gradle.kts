@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 
 plugins {
     kotlin("jvm")
@@ -52,6 +53,13 @@ compose.desktop {
             }
         }
     }
+}
+
+// jpackage works out the .deb dependencies from the libraries installed on the build machine. A server or
+// container without the X11 libraries AWT loads would leave them out, and the app would not start on a desktop without them.
+// No spaces in the list: jpackage reads its arguments from a file that splits at them.
+tasks.withType<AbstractJPackageTask>().configureEach {
+    if (targetFormat == TargetFormat.Deb) freeArgs.addAll("--linux-package-deps", "libxtst6,libxi6,libxrandr2")
 }
 
 // The same icon.png is the window icon on Linux and Windows (see Main.kt).
