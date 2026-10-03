@@ -168,7 +168,7 @@ internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
             Column {
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 Text(
-                    "Zugfolge oder Stellung hier einfügen – am Mac mit Cmd+V, am Handy lange drücken. " +
+                    "Zugfolge oder Stellung hier einfügen – am Computer mit Cmd/Strg+V, am Handy lange drücken. " +
                         "Aus einer PGN wird die Zugfolge (Kommentare und Nebenvarianten fallen weg), " +
                         "aus einer FEN die Stellung, ab der du weiterspielst.",
                     style = MaterialTheme.typography.bodySmall,
