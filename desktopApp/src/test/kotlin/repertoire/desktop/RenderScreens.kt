@@ -10,6 +10,7 @@ import repertoire.core.Position
 import repertoire.core.Store
 import repertoire.ui.App
 import repertoire.ui.AppViewModel
+import repertoire.ui.BoardTheme
 import repertoire.ui.Command
 import repertoire.ui.HelpTopic
 import repertoire.ui.KeyTarget
@@ -150,6 +151,18 @@ fun main() {
     }
     render("einstellungen") { vm ->
         vm.sample()
+        vm.openConfig()
+    }
+    render("abspielen") { vm ->
+        vm.sample()
+        vm.setBoardTheme(BoardTheme.GREEN)
+        vm.editVariant(vm.library.variants.last(), play = true)
+        repeat(7) { vm.editorPlayTick() }
+    }
+    render("einstellungen-kacheln") { vm ->
+        vm.sample()
+        vm.setTapGrid(1, 2)
+        vm.setHorseLeft(true)
         vm.openConfig()
     }
     render("einstellungen-tasten") { vm ->

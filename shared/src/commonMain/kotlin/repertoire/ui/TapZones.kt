@@ -9,38 +9,75 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import repertoire.core.Settings
 
-/** The six areas of the phone's screen for double taps: two columns and three rows, read like a book. */
-enum class TapZone(val label: String, val short: String) {
-    TOP_LEFT("oben links", "oben l."),
-    TOP_RIGHT("oben rechts", "oben r."),
-    MIDDLE_LEFT("Mitte links", "Mitte l."),
-    MIDDLE_RIGHT("Mitte rechts", "Mitte r."),
-    BOTTOM_LEFT("unten links", "unten l."),
-    BOTTOM_RIGHT("unten rechts", "unten r."),
-    ;
+/** Bounds of the grid of double-tap zones. */
+const val TAP_COLS_MAX = 3
+const val TAP_ROWS_MAX = 4
 
+/** One area of the phone's screen for double taps: a [column] in a [row] of the grid, read like a book. */
+data class TapZone(val column: Int, val row: Int) {
     companion object {
-        fun at(position: Offset, size: IntSize): TapZone {
-            val column = if (position.x < size.width / 2f) 0 else 1
-            val row = (position.y / size.height * 3).toInt().coerceIn(0, 2)
-            return entries[row * 2 + column]
+        fun at(position: Offset, size: IntSize, cols: Int = 2, rows: Int = 3): TapZone {
+            val column = (position.x / size.width * cols).toInt().coerceIn(0, cols - 1)
+            val row = (position.y / size.height * rows).toInt().coerceIn(0, rows - 1)
+            return TapZone(column, row)
         }
     }
 }
 
+/** "oben links", "Mitte", "unten", "ganzer Bildschirm" … by where the zone lies in the grid. */
+fun TapZone.label(cols: Int, rows: Int): String {
+    val vertical = when {
+        rows == 1 -> ""
+        row == 0 -> "oben"
+        row == rows - 1 -> "unten"
+        rows == 3 -> "Mitte"
+        else -> "Reihe ${row + 1}"
+    }
+    val horizontal = when {
+        cols == 1 -> ""
+        column == 0 -> "links"
+        column == cols - 1 -> "rechts"
+        else -> "Mitte"
+    }
+    return when {
+        vertical.isEmpty() && horizontal.isEmpty() -> "ganzer Bildschirm"
+        vertical == horizontal -> vertical
+        else -> listOf(vertical, horizontal).filter { it.isNotEmpty() }.joinToString(" ")
+    }
+}
+
+/** The label, short enough for a pill: "oben l.". */
+fun TapZone.shortLabel(cols: Int, rows: Int): String = label(cols, rows).replace("links", "l.").replace("rechts", "r.")
+
+/** Every zone of the current grid, row by row. */
+val Settings.zones: List<TapZone> get() = List(tapRows * tapCols) { TapZone(it % tapCols, it / tapCols) }
+
 /** What a double tap into [zone] runs; null if nothing. */
 fun Settings.commandAt(zone: TapZone): Command? =
-    tapZones.getOrNull(zone.ordinal)?.let { name -> Command.entries.firstOrNull { it.name == name } }
+    if (zone.column >= tapCols || zone.row >= tapRows) null
+    else tapZones.getOrNull(zone.row * tapCols + zone.column)?.let { name -> Command.entries.firstOrNull { it.name == name } }
 
 /** The first zone that runs [command], for the list of shortcuts. */
 fun Settings.zoneOf(command: Command): TapZone? =
-    if (tapZonesOn) TapZone.entries.firstOrNull { commandAt(it) == command } else null
+    if (tapZonesOn) zones.firstOrNull { commandAt(it) == command } else null
 
 /** [tapZones] with [zone] set to [command] (null: nothing). */
 fun Settings.withZone(zone: TapZone, command: Command?): Settings {
-    val zones = List(TapZone.entries.size) { tapZones.getOrElse(it) { "" } }.toMutableList()
-    zones[zone.ordinal] = command?.name ?: ""
+    val zones = List(tapCols * tapRows) { tapZones.getOrElse(it) { "" } }.toMutableList()
+    zones[zone.row * tapCols + zone.column] = command?.name ?: ""
     return copy(tapZones = zones)
+}
+
+/** A grid of [cols] × [rows]: zones that still exist keep their shortcut, new ones start empty. */
+fun Settings.withGrid(cols: Int, rows: Int): Settings {
+    val c = cols.coerceIn(1, TAP_COLS_MAX)
+    val r = rows.coerceIn(1, TAP_ROWS_MAX)
+    val kept = List(c * r) { i ->
+        val column = i % c
+        val row = i / c
+        commandAt(TapZone(column, row))?.name ?: ""
+    }
+    return copy(tapCols = c, tapRows = r, tapZones = kept)
 }
 
 /**
@@ -48,7 +85,7 @@ fun Settings.withZone(zone: TapZone, command: Command?): Settings {
  * else used count: buttons, text fields and the board consume theirs, so they work as before and
  * a double tap only does something on a free spot. Nothing is consumed here.
  */
-fun Modifier.doubleTapZones(onDoubleTap: (TapZone) -> Unit): Modifier = pointerInput(Unit) {
+fun Modifier.doubleTapZones(cols: Int, rows: Int, onDoubleTap: (TapZone) -> Unit): Modifier = pointerInput(cols, rows) {
     var lastZone: TapZone? = null
     var lastUp = 0L
     awaitEachGesture {
@@ -63,7 +100,7 @@ fun Modifier.doubleTapZones(onDoubleTap: (TapZone) -> Unit): Modifier = pointerI
             lastZone = null
             return@awaitEachGesture
         }
-        val zone = TapZone.at(down.position, size)
+        val zone = TapZone.at(down.position, size, cols, rows)
         if (zone == lastZone && down.uptimeMillis - lastUp <= viewConfiguration.doubleTapTimeoutMillis) {
             lastZone = null
             onDoubleTap(zone)

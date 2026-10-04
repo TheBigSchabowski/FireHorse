@@ -21,10 +21,10 @@ fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false)
     val clipboard = LocalClipboardManager.current
     SideEffect { vm.copyToClipboard = { clipboard.setText(AnnotatedString(it)) } }
     MaterialTheme(colorScheme = darkColorScheme()) {
-        CompositionLocalProvider(LocalTouch provides touch) {
+        CompositionLocalProvider(LocalTouch provides touch, LocalBoardTheme provides BoardTheme.named(vm.library.settings.boardTheme)) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 // Double taps on a free spot run the shortcut of that part of the screen.
-                val zones = if (touch && vm.library.settings.tapZonesOn) Modifier.doubleTapZones(vm::tapZone) else Modifier
+                val zones = if (touch && vm.library.settings.tapZonesOn) Modifier.doubleTapZones(vm.library.settings.tapCols, vm.library.settings.tapRows, vm::tapZone) else Modifier
                 Box(modifier.fillMaxSize().then(zones)) {
                     val session = vm.session
                     val editor = vm.editor

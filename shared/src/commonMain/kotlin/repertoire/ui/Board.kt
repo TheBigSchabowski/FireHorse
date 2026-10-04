@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -60,8 +61,20 @@ import repertoire.shared.resources.wq
 import repertoire.shared.resources.wr
 import kotlin.math.roundToInt
 
-private val LIGHT = Color(0xFFF0D9B5)
-private val DARK = Color(0xFFB58863)
+/** The two square colors of the board. */
+enum class BoardTheme(val label: String, val light: Color, val dark: Color) {
+    CLASSIC("Klassisch", Color(0xFFF0D9B5), Color(0xFFB58863)),
+    GREEN("Grün", Color(0xFFEEEED2), Color(0xFF769656)),
+    BLUE("Blau", Color(0xFFDEE3E6), Color(0xFF8CA2AD)),
+    GRAY("Grau", Color(0xFFE0E0E0), Color(0xFF8A8A8A)),
+    ;
+
+    companion object {
+        fun named(name: String) = entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: CLASSIC
+    }
+}
+
+val LocalBoardTheme = staticCompositionLocalOf { BoardTheme.CLASSIC }
 private val LAST_MOVE = Color(0x80CDD26A)
 private val SELECTED = Color(0x9982A55A)
 private val RIGHT = Color(0x9955C255)
@@ -108,6 +121,7 @@ fun ChessBoard(
     /** Passed in for the main board, so that Ctrl+B m can switch it from outside. */
     drawModeState: MutableState<Boolean> = remember { mutableStateOf(false) },
 ) {
+    val theme = LocalBoardTheme.current
     var selected by remember(position) { mutableStateOf<Int?>(null) }
     var dragFrom by remember(position) { mutableStateOf<Int?>(null) }
     var dragPos by remember { mutableStateOf(Offset.Zero) }
@@ -289,7 +303,7 @@ fun ChessBoard(
                     Modifier
                         .offset { IntOffset(tl.x.roundToInt(), tl.y.roundToInt()) }
                         .size(squareDp)
-                        .background(if (isLight) LIGHT else DARK),
+                        .background(if (isLight) theme.light else theme.dark),
                 ) {
                     val overlay = when {
                         marks[sq] == true -> RIGHT
@@ -313,7 +327,7 @@ fun ChessBoard(
                     // Coordinates along the bottom and left edge.
                     val col = (tl.x / squarePx).roundToInt()
                     val row = (tl.y / squarePx).roundToInt()
-                    val labelColor = if (isLight) DARK else LIGHT
+                    val labelColor = if (isLight) theme.dark else theme.light
                     if (row == 7) {
                         Text(
                             "${'a' + sq % 8}", color = labelColor, fontSize = (squareDp.value * 0.18f).sp,

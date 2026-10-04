@@ -111,6 +111,9 @@ class EditorState(
     /** The theory field is open (Cmd/Ctrl+T). */
     var showTheory by mutableStateOf(theory.isNotBlank())
 
+    /** The player is running: the cursor moves on by itself. */
+    var playing by mutableStateOf(false)
+
     /** Drawing mode of the board (three taps or Ctrl+B m). */
     val drawMode = mutableStateOf(false)
 
@@ -203,6 +206,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.SETTINGS -> prefs = if (prefs == null) Prefs.Config else null
             Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
                 ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
+            Command.PLAY -> editor?.let { editorTogglePlay() }
+                ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
             Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
                 editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
@@ -314,6 +319,18 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun setTapZone(zone: TapZone, command: Command?) = updateLibrary { it.copy(settings = it.settings.withZone(zone, command)) }
 
+    fun setTapGrid(cols: Int, rows: Int) = updateLibrary { it.copy(settings = it.settings.withGrid(cols, rows)) }
+
+    fun setPlayDelay(ms: Int) = updateLibrary { it.copy(settings = it.settings.copy(playDelayMs = ms.coerceIn(PLAY_DELAY_MIN, PLAY_DELAY_MAX))) }
+
+    fun setPlayLoop(on: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(playLoop = on)) }
+
+    fun setHorseOn(on: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(horseOn = on)) }
+
+    fun setHorseLeft(left: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(horseLeft = left)) }
+
+    fun setBoardTheme(theme: BoardTheme) = updateLibrary { it.copy(settings = it.settings.copy(boardTheme = theme.name)) }
+
     /** Shown in the editor when it was opened on top of a puzzle. */
     private val backToPuzzle: String?
         get() = if (session != null) "Das Puzzle wartet: nach Speichern oder Abbrechen geht es dort weiter." else null
@@ -360,8 +377,31 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     /** Opens a saved variant; [fromStart] puts the board at move zero to step through the line. */
-    fun editVariant(v: Variant, fromStart: Boolean = false) {
-        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart, v.startFen)
+    fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false) {
+        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart || play, v.startFen)
+        if (play) editor?.playing = v.moves.isNotEmpty()
+    }
+
+    /** Starts or stops the player; at the end of the line it starts over from the beginning. */
+    fun editorTogglePlay() {
+        val e = editor ?: return
+        if (e.playing) {
+            e.playing = false
+        } else if (e.moves.isNotEmpty()) {
+            if (e.atEnd) e.cursor = 0
+            e.playing = true
+        }
+    }
+
+    /** One step of the player, after the delay: the next move, or the end: start over or stop. */
+    fun editorPlayTick() {
+        val e = editor ?: return
+        when {
+            !e.playing -> Unit
+            !e.atEnd -> e.cursor++
+            library.settings.playLoop -> e.cursor = 0
+            else -> e.playing = false
+        }
     }
 
     /**
@@ -370,6 +410,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
      */
     fun editorPlay(move: Move) {
         val e = editor ?: return
+        e.playing = false
         if (e.moves.getOrNull(e.cursor) != move) e.moves = e.shown + move
         e.cursor++
     }
@@ -377,6 +418,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** Puts the board [index] moves into the line; the moves themselves stay. */
     fun editorGoTo(index: Int) {
         val e = editor ?: return
+        e.playing = false
         e.cursor = index.coerceIn(0, e.moves.size)
     }
 

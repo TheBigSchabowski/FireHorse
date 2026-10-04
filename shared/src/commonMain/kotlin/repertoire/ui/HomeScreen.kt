@@ -132,6 +132,7 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
                 }
                 TextButton(onClick = { vm.practice(v.id) }) { Text("Üben") }
                 TextButton(onClick = { vm.practiceMoves(v.id) }) { Text("Züge üben") }
+                TextButton(onClick = { vm.editVariant(v, play = true) }) { Text("▶ Abspielen") }
                 TextButton(onClick = { vm.editVariant(v, fromStart = true) }) { Text("Durchgehen") }
                 TextButton(onClick = { vm.newVariant(template = v) }) { Text("Weiterführen") }
                 TextButton(onClick = { vm.editVariant(v) }) { Text("Bearbeiten") }

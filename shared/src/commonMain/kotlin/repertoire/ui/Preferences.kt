@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -63,8 +64,9 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     LEARNING("Lernen und Üben", "Lernen, Frei üben, Züge üben, neue Varianten pro Tag"),
     THEORY("Theorie und Lücken", "Notizen zur Variante, die beim Üben abgefragt werden"),
     BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus"),
+    PLAYER("Abspielen", "Eine Variante von allein durchlaufen lassen, Tempo, Wiederholen"),
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
-    TAP_ZONES("Doppeltippen", "Sechs Bereiche des Bildschirms für Kürzel", touch = true),
+    TAP_ZONES("Doppeltippen", "Bereiche des Bildschirms für Kürzel, Raster frei wählbar", touch = true),
     KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
     DATA("Speichern und Übertragen", "Wo alles liegt, Export und Import"),
     ;
@@ -118,22 +120,68 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
             plus = "+5",
         )
     }
+    Section("Abspielen", onHelp = { vm.openHelp(HelpTopic.PLAYER) }) {
+        Text("Zeit pro Zug")
+        Spacer(Modifier.height(6.dp))
+        Stepper(
+            formatSeconds(settings.playDelayMs.toLong()),
+            onMinus = { vm.setPlayDelay(settings.playDelayMs - PLAY_DELAY_INCREMENT) },
+            onPlus = { vm.setPlayDelay(settings.playDelayMs + PLAY_DELAY_INCREMENT) },
+            minusEnabled = settings.playDelayMs > PLAY_DELAY_MIN,
+            plusEnabled = settings.playDelayMs < PLAY_DELAY_MAX,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Nach dem letzten Zug von vorn beginnen", modifier = Modifier.weight(1f))
+            Switch(settings.playLoop, onCheckedChange = vm::setPlayLoop)
+        }
+    }
+    Section("Brett", onHelp = { vm.openHelp(HelpTopic.BOARD) }) {
+        Text("Farben")
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (theme in BoardTheme.entries) {
+                val selected = BoardTheme.named(settings.boardTheme) == theme
+                OutlinedButton(
+                    onClick = { vm.setBoardTheme(theme) },
+                    border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                ) {
+                    Box(Modifier.size(14.dp).background(theme.light))
+                    Box(Modifier.size(14.dp).background(theme.dark))
+                    Text(theme.label, Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
     if (touch) {
         val step = settings.holdStepMs
         Section("Das Pferd", onHelp = { vm.openHelp(HelpTopic.HORSE) }) {
-            Text("Haltezeit pro Schritt")
-            Spacer(Modifier.height(6.dp))
-            Stepper(
-                formatSeconds(step.toLong()),
-                onMinus = { vm.setHoldStep(step - HOLD_STEP_INCREMENT) },
-                onPlus = { vm.setHoldStep(step + HOLD_STEP_INCREMENT) },
-                minusEnabled = step > HOLD_STEP_MIN,
-                plusEnabled = step < HOLD_STEP_MAX,
-            )
-            Hint(
-                Command.entries.filter { (it.holdSteps ?: 0) > 0 }
-                    .joinToString(", ") { "${it.short} nach ${formatSeconds(it.holdSteps!!.toLong() * step)}" } + ".",
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Pferd anzeigen", modifier = Modifier.weight(1f))
+                Switch(settings.horseOn, onCheckedChange = vm::setHorseOn)
+            }
+            if (!settings.horseOn) {
+                Hint("Ohne Pferd erreichst du die Kürzel nur noch durch Doppeltippen" + (if (settings.tapZonesOn) "." else " – und das ist gerade aus. Die Einstellungen gibt es weiter auf der Startseite."))
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Unten links statt rechts", modifier = Modifier.weight(1f))
+                    Switch(settings.horseLeft, onCheckedChange = vm::setHorseLeft)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Haltezeit pro Schritt")
+                Spacer(Modifier.height(6.dp))
+                Stepper(
+                    formatSeconds(step.toLong()),
+                    onMinus = { vm.setHoldStep(step - HOLD_STEP_INCREMENT) },
+                    onPlus = { vm.setHoldStep(step + HOLD_STEP_INCREMENT) },
+                    minusEnabled = step > HOLD_STEP_MIN,
+                    plusEnabled = step < HOLD_STEP_MAX,
+                )
+                Hint(
+                    Command.entries.filter { (it.holdSteps ?: 0) > 0 }
+                        .joinToString(", ") { "${it.short} nach ${formatSeconds(it.holdSteps!!.toLong() * step)}" } + ".",
+                )
+            }
         }
         Section("Doppeltippen", onHelp = { vm.openHelp(HelpTopic.TAP_ZONES) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -141,8 +189,28 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
                 Switch(settings.tapZonesOn, onCheckedChange = vm::setTapZonesOn)
             }
             if (settings.tapZonesOn) {
+                Spacer(Modifier.height(8.dp))
+                Text("Spalten")
                 Spacer(Modifier.height(6.dp))
-                Hint("Der Bildschirm in sechs Bereichen. Antippen, um festzulegen, was ein Bereich macht:")
+                Stepper(
+                    "${settings.tapCols}",
+                    onMinus = { vm.setTapGrid(settings.tapCols - 1, settings.tapRows) },
+                    onPlus = { vm.setTapGrid(settings.tapCols + 1, settings.tapRows) },
+                    minusEnabled = settings.tapCols > 1,
+                    plusEnabled = settings.tapCols < TAP_COLS_MAX,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Reihen")
+                Spacer(Modifier.height(6.dp))
+                Stepper(
+                    "${settings.tapRows}",
+                    onMinus = { vm.setTapGrid(settings.tapCols, settings.tapRows - 1) },
+                    onPlus = { vm.setTapGrid(settings.tapCols, settings.tapRows + 1) },
+                    minusEnabled = settings.tapRows > 1,
+                    plusEnabled = settings.tapRows < TAP_ROWS_MAX,
+                )
+                Spacer(Modifier.height(8.dp))
+                Hint("Der Bildschirm in ${settings.zones.size} Bereich(en). Antippen, um festzulegen, was ein Bereich macht:")
                 Spacer(Modifier.height(8.dp))
                 ZoneGrid(settings, onPick = vm::setTapZone)
             }
@@ -240,11 +308,11 @@ private fun ZoneGrid(settings: Settings, onPick: ((TapZone, Command?) -> Unit)?)
             .padding(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        for (row in 0..2) {
+        for (row in 0 until settings.tapRows) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (column in 0..1) {
-                    val zone = TapZone.entries[row * 2 + column]
-                    ZoneTile(zone, settings.commandAt(zone), onPick, Modifier.weight(1f))
+                for (column in 0 until settings.tapCols) {
+                    val zone = TapZone(column, row)
+                    ZoneTile(zone.label(settings.tapCols, settings.tapRows), settings.commandAt(zone), zone, onPick, Modifier.weight(1f))
                 }
             }
         }
@@ -252,7 +320,7 @@ private fun ZoneGrid(settings: Settings, onPick: ((TapZone, Command?) -> Unit)?)
 }
 
 @Composable
-private fun ZoneTile(zone: TapZone, command: Command?, onPick: ((TapZone, Command?) -> Unit)?, modifier: Modifier) {
+private fun ZoneTile(label: String, command: Command?, zone: TapZone, onPick: ((TapZone, Command?) -> Unit)?, modifier: Modifier) {
     var open by remember { mutableStateOf(false) }
     Box(
         modifier.height(64.dp)
@@ -261,7 +329,7 @@ private fun ZoneTile(zone: TapZone, command: Command?, onPick: ((TapZone, Comman
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Column {
-            Text(zone.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 command?.short ?: "—",
                 style = MaterialTheme.typography.bodyMedium,
@@ -390,6 +458,18 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             )
             Para("Gezeichnetes wird nicht gespeichert. Das gilt im Editor wie beim Üben.")
         }
+        HelpTopic.PLAYER -> {
+            Para("Wer sich eine Stellung oder Zugfolge nicht mehr merkt, lässt die Variante einfach ablaufen, statt jeden Zug anzuklicken.")
+            Bullet("▶ Abspielen", "auf der Startseite bei einer Variante, oder im Editor direkt unter dem Brett. Es beginnt am Start (oder am Ende erneut von vorn) und geht von allein Zug um Zug weiter.")
+            Bullet("⏸ Pause", "hält an der aktuellen Stellung an. Auch jeder Klick auf ein Feld, einen Pfeil oder einen Zug in der Liste hält den Player an.")
+            Bullet("− / +", "weniger oder mehr Zeit pro Zug, gerade ${formatSeconds(settings.playDelayMs.toLong())} (zwischen ${formatSeconds(PLAY_DELAY_MIN.toLong())} und ${formatSeconds(PLAY_DELAY_MAX.toLong())}).")
+            Bullet("Wiederholen", "beginnt nach dem letzten Zug wieder von vorn, bis du pausierst.")
+            Para(
+                "Als Kürzel: " + (if (touch) "ein Bereich beim Doppeltippen lässt sich auf „Abspielen“ legen." else "${settings.shortcutLabel(Command.PLAY)}.") +
+                    " Das Gleiche stellst du auch in der Konfiguration ein.",
+            )
+            ConfigButton(vm, "Tempo einstellen")
+        }
         HelpTopic.HORSE -> {
             Para("Unten rechts sitzt ein kleines Pferd. Es ersetzt am Handy die Tastenkürzel vom Computer.")
             Bullet("Antippen", "öffnet die Liste aller Kürzel; jeder Eintrag lässt sich dort auch direkt antippen.")
@@ -405,7 +485,8 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
         }
         HelpTopic.TAP_ZONES -> {
             Para(
-                "Der Bildschirm ist in sechs Bereiche geteilt: zwei Spalten, drei Reihen. Zweimal schnell auf eine freie " +
+                "Der Bildschirm ist in Bereiche geteilt, standardmäßig zwei Spalten und drei Reihen; wie viele es sein sollen, " +
+                    "stellst du in der Konfiguration ein (1–$TAP_COLS_MAX Spalten, 1–$TAP_ROWS_MAX Reihen – zum Beispiel nur oben und unten). Zweimal schnell auf eine freie " +
                     "Stelle tippen führt aus, was diesem Bereich zugeordnet ist – auf jedem Bildschirm, auch mitten in einem Puzzle.",
             )
             Para(

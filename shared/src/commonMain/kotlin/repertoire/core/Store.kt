@@ -10,15 +10,28 @@ data class Settings(
     val holdStepMs: Int = 1000,
     /** Double taps on a free spot of the phone's screen run a shortcut, by where they land. */
     val tapZonesOn: Boolean = true,
+    /** The screen is cut into [tapCols] columns and [tapRows] rows of zones. */
+    val tapCols: Int = 2,
+    val tapRows: Int = 3,
     /**
-     * The shortcut (a `Command` name, "" for none) of each of the six zones: two columns and three
-     * rows, read like a book – top left, top right, middle left, …
+     * The shortcut (a `Command` name, "" for none) of each zone, [tapCols] per row, read like a
+     * book – top left, top right, middle left, …
      */
     val tapZones: List<String> = listOf("SHORTCUTS", "DRAW", "NEW_VARIANT", "SETTINGS", "PASTE_PGN", "PASTE_FEN"),
     /** The letter that goes with Ctrl to start a shortcut on the keyboard. */
     val prefixKey: String = "b",
     /** Keys changed from their default, by `Command` name; the rest keep theirs. */
     val keys: Map<String, String> = emptyMap(),
+    /** Time between two moves when a variant is played. */
+    val playDelayMs: Int = 1500,
+    /** The player starts over after the last move. */
+    val playLoop: Boolean = false,
+    /** The horse button on a phone; off: shortcuts only by double tap. */
+    val horseOn: Boolean = true,
+    /** The horse sits at the bottom left instead of the bottom right. */
+    val horseLeft: Boolean = false,
+    /** Name of a `BoardTheme`. */
+    val boardTheme: String = "classic",
 )
 
 @Serializable

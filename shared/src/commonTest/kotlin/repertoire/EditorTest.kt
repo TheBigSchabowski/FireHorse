@@ -47,6 +47,33 @@ class EditorTest {
     private fun AppViewModel.san(): String = library.variants.last().numberedSan().joinToString(" ")
 
     @Test
+    fun thePlayerWalksThroughTheLineByItself() {
+        val vm = app()
+        val id = vm.add("Offen", LINE)
+        vm.editVariant(vm.library.variants.first { it.id == id }, play = true)
+        val e = vm.editor!!
+        assertEquals(0, e.cursor)
+        assertTrue(e.playing)
+        repeat(6) { vm.editorPlayTick() }
+        assertEquals(6, e.cursor)
+        // At the end it stops, unless it should start over.
+        vm.editorPlayTick()
+        assertFalse(e.playing)
+        // Play at the end starts from the beginning again.
+        vm.editorTogglePlay()
+        assertEquals(0, e.cursor)
+        vm.setPlayLoop(true)
+        repeat(7) { vm.editorPlayTick() }
+        assertEquals(0, e.cursor)
+        assertTrue(e.playing)
+        // Stepping by hand stops it.
+        vm.editorPlayTick()
+        vm.editorStepForward()
+        assertEquals(2, e.cursor)
+        assertFalse(e.playing)
+    }
+
+    @Test
     fun steppingThroughTheLineKeepsEveryMove() {
         val vm = app()
         val id = vm.add("Offen", LINE)

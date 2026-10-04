@@ -42,6 +42,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import repertoire.core.Cloze
 import repertoire.core.numberedSan
 
@@ -73,17 +74,16 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             },
             top = { Chalkboard(e.opening, e.name.ifBlank { "Name der Variante" }) },
         ) {
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                e.opening, { e.opening = it }, label = { Text("Eröffnung (z. B. Sizilianisch)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { vm.editorGoTo(0) }, enabled = e.cursor > 0) { Text("|◀") }
+                OutlinedButton(onClick = vm::editorStepBack, enabled = e.cursor > 0) { Text("◀") }
+                OutlinedButton(onClick = vm::editorStepForward, enabled = !e.atEnd) { Text("▶") }
+                OutlinedButton(onClick = vm::editorToEnd, enabled = !e.atEnd) { Text("▶|") }
+            }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                e.name, { e.name = it }, label = { Text("Variante (z. B. Scheveningen)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(16.dp))
+            Player(vm, e)
+            Spacer(Modifier.height(4.dp))
             Text(
                 when {
                     !e.atEnd -> "Zug ${e.cursor} von ${e.moves.size}. Ein anderer Zug auf dem Brett ersetzt ab hier den Rest."
@@ -108,13 +108,6 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             Spacer(Modifier.height(8.dp))
             MoveList(vm, e)
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { vm.editorGoTo(0) }, enabled = e.cursor > 0) { Text("|◀") }
-                OutlinedButton(onClick = vm::editorStepBack, enabled = e.cursor > 0) { Text("◀") }
-                OutlinedButton(onClick = vm::editorStepForward, enabled = !e.atEnd) { Text("▶") }
-                OutlinedButton(onClick = vm::editorToEnd, enabled = !e.atEnd) { Text("▶|") }
-            }
-            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (e.atEnd) {
                     OutlinedButton(onClick = vm::editorUndo, enabled = e.moves.isNotEmpty()) { Text("Zug zurück") }
@@ -123,6 +116,16 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 }
                 OutlinedButton(onClick = vm::editorClear, enabled = e.moves.isNotEmpty()) { Text("Alle löschen") }
             }
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                e.opening, { e.opening = it }, label = { Text("Eröffnung (z. B. Sizilianisch)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                e.name, { e.name = it }, label = { Text("Variante (z. B. Scheveningen)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(Modifier.height(12.dp))
             TheoryEditor(vm, e)
             Spacer(Modifier.height(12.dp))
@@ -150,6 +153,44 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 TextButton(onClick = vm::cancelEditor) { Text("Abbrechen") }
             }
         }
+    }
+}
+
+/** Play button, speed and repeat: the variant runs by itself, one move per delay, until stopped or at its end. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Player(vm: AppViewModel, e: EditorState) {
+    val settings = vm.library.settings
+    LaunchedEffect(e.playing, e.cursor, settings.playDelayMs) {
+        if (!e.playing) return@LaunchedEffect
+        delay(settings.playDelayMs.toLong())
+        vm.editorPlayTick()
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Button(onClick = vm::editorTogglePlay, enabled = e.moves.isNotEmpty()) {
+            Text(if (e.playing) "⏸ Pause" else "▶ Abspielen")
+        }
+        // Less time per move is faster, so "−" sits on the left like on a stepper.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = { vm.setPlayDelay(settings.playDelayMs - PLAY_DELAY_INCREMENT) },
+                enabled = settings.playDelayMs > PLAY_DELAY_MIN,
+            ) { Text("−") }
+            Text(
+                formatSeconds(settings.playDelayMs.toLong()) + " / Zug",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            OutlinedButton(
+                onClick = { vm.setPlayDelay(settings.playDelayMs + PLAY_DELAY_INCREMENT) },
+                enabled = settings.playDelayMs < PLAY_DELAY_MAX,
+            ) { Text("+") }
+        }
+        FilterChip(selected = settings.playLoop, onClick = { vm.setPlayLoop(!settings.playLoop) }, label = { Text("Wiederholen") })
     }
 }
 

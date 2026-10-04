@@ -47,6 +47,10 @@ installieren“ erlauben.
   du spielst von dort die Züge, die du üben willst, und trainierst sie später auch ab dort. Das
   Eingefügte landet erst im Editor: durchgehen, mit „Ab hier kürzen“ zuschneiden, benennen,
   speichern. Eine bloße Zugliste („e4 c5 Nf3“) geht genauso.
+- **▶ Abspielen:** bei einer Variante auf der Startseite oder im Editor direkt unter dem Brett. Die
+  Variante läuft von allein Zug für Zug ab, z. B. wenn du eine Zugfolge vergessen hast. ⏸ hält an,
+  `−`/`+` ändern die Zeit pro Zug (0,5 bis 5 s), „Wiederholen“ beginnt am Ende von vorn. Jeder Klick
+  aufs Brett, auf einen Pfeil oder einen Zug hält den Player ebenfalls an.
 - **Durchgehen:** öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶|, den Pfeiltasten ← → oder einem Klick
   auf einen Zug in der Liste gehst du die Züge durch — nichts wird dabei gelöscht.
 - **Bearbeiten:** dasselbe Brett, nur gleich bei der Endstellung. Ein Zug mitten in der Variante
@@ -71,7 +75,8 @@ installieren“ erlauben.
   und die Karte kommt bald wieder.
 - Desktop: `Enter` / `Leertaste` = „Gut“ bzw. „Weiter“.
 - **Einstellungen** (oben auf der Startseite) haben zwei Reiter: **Konfiguration** (neue Varianten
-  pro Tag, am Computer die Tastenbelegung, am Handy Pferd und Doppeltippen, Export/Import) und **Hilfe**, die alles hier Beschriebene in der App
+  pro Tag, Tempo des Players, Brettfarben, am Computer die Tastenbelegung samt Präfix, am Handy das Pferd
+  (an/aus, links/rechts, Haltezeit) und das Raster fürs Doppeltippen, Export/Import), alles jederzeit änderbar, und **Hilfe**, die alles hier Beschriebene in der App
   erklärt. „Hilfe“ neben jedem Bereich der Konfiguration öffnet direkt die passende Seite.
 
 ### Kürzel
@@ -80,11 +85,12 @@ Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die 
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
 Die Liste kommt immer auch mit `?` oder `h`.
-Am Handy übernimmt das **Pferd** unten rechts: kurz antippen zeigt die Liste, gedrückt halten wählt
+Am Handy übernimmt das **Pferd** unten rechts (lässt sich nach links legen oder ausblenden): kurz antippen zeigt die Liste, gedrückt halten wählt
 nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab. Wie lang ein Schritt
 dauert (0,5 bis 3 s, Standard 1 s), steht in den Einstellungen.
 
-**Doppeltippen (Handy):** Der Bildschirm ist in sechs Bereiche geteilt (zwei Spalten, drei Reihen).
+**Doppeltippen (Handy):** Der Bildschirm ist in Bereiche geteilt, standardmäßig sechs (zwei Spalten,
+drei Reihen). Das Raster ist frei wählbar, 1–3 Spalten und 1–4 Reihen, z. B. nur „oben“ und „unten“.
 Zweimal schnell auf eine freie Stelle tippen – kein Knopf, kein Textfeld, nicht das Brett – führt
 das Kürzel dieses Bereichs aus. Welcher Bereich was macht, lässt sich in den Einstellungen festlegen
 oder ganz ausschalten.
@@ -96,6 +102,7 @@ oder ganz ausschalten.
 | `Strg+B c` | 2 Schritte halten | Neue Variante |
 | `Strg+B p` | 3 Schritte halten | PGN einfügen |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
+| `Strg+B a` | Kürzel-Liste antippen | Variante abspielen / anhalten (im Editor) |
 | `Strg+B s` | Doppeltippen Mitte rechts | Einstellungen und Hilfe |
 | `Strg+B 2` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
 | `Strg+B 3` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |

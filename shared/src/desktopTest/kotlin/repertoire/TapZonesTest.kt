@@ -24,8 +24,11 @@ import repertoire.ui.Prefs
 import repertoire.ui.TapZone
 import repertoire.ui.commandAt
 import repertoire.ui.doubleTapZones
+import repertoire.ui.label
+import repertoire.ui.withGrid
 import repertoire.ui.withZone
 import repertoire.ui.zoneOf
+import repertoire.ui.zones
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -44,22 +47,34 @@ class TapZonesTest {
     @Test
     fun theScreenIsSixZonesReadLikeABook() {
         val size = IntSize(400, 900)
-        assertEquals(TapZone.TOP_LEFT, TapZone.at(Offset(10f, 10f), size))
-        assertEquals(TapZone.TOP_RIGHT, TapZone.at(Offset(390f, 299f), size))
-        assertEquals(TapZone.MIDDLE_LEFT, TapZone.at(Offset(199f, 450f), size))
-        assertEquals(TapZone.MIDDLE_RIGHT, TapZone.at(Offset(200f, 301f), size))
-        assertEquals(TapZone.BOTTOM_LEFT, TapZone.at(Offset(0f, 899f), size))
-        assertEquals(TapZone.BOTTOM_RIGHT, TapZone.at(Offset(400f, 900f), size))
+        assertEquals(TapZone(0, 0), TapZone.at(Offset(10f, 10f), size))
+        assertEquals(TapZone(1, 0), TapZone.at(Offset(390f, 299f), size))
+        assertEquals(TapZone(0, 1), TapZone.at(Offset(199f, 450f), size))
+        assertEquals(TapZone(1, 1), TapZone.at(Offset(200f, 301f), size))
+        assertEquals(TapZone(0, 2), TapZone.at(Offset(0f, 899f), size))
+        assertEquals(TapZone(1, 2), TapZone.at(Offset(400f, 900f), size))
+    }
+
+    @Test
+    fun theGridCanBeResized() {
+        val size = IntSize(400, 900)
+        assertEquals(TapZone(0, 1), TapZone.at(Offset(300f, 600f), size, cols = 1, rows = 2))
+        val grid = Settings().withGrid(1, 2)
+        assertEquals(Command.SHORTCUTS, grid.commandAt(TapZone(0, 0)))
+        assertEquals(Command.NEW_VARIANT, grid.commandAt(TapZone(0, 1)))
+        assertEquals(listOf("oben", "unten"), grid.zones.map { it.label(1, 2) })
+        assertNull(grid.commandAt(TapZone(1, 0)))
+        assertEquals(1 * 2, grid.tapZones.size)
     }
 
     @Test
     fun eachZoneCanBeGivenAShortcut() {
         val default = Settings()
-        assertEquals(Command.SHORTCUTS, default.commandAt(TapZone.TOP_LEFT))
-        assertEquals(Command.PASTE_FEN, default.commandAt(TapZone.BOTTOM_RIGHT))
-        val changed = default.withZone(TapZone.TOP_LEFT, null).withZone(TapZone.MIDDLE_RIGHT, Command.PASTE_PGN)
-        assertNull(changed.commandAt(TapZone.TOP_LEFT))
-        assertEquals(TapZone.MIDDLE_RIGHT, changed.zoneOf(Command.PASTE_PGN))
+        assertEquals(Command.SHORTCUTS, default.commandAt(TapZone(0, 0)))
+        assertEquals(Command.PASTE_FEN, default.commandAt(TapZone(1, 2)))
+        val changed = default.withZone(TapZone(0, 0), null).withZone(TapZone(1, 1), Command.PASTE_PGN)
+        assertNull(changed.commandAt(TapZone(0, 0)))
+        assertEquals(TapZone(1, 1), changed.zoneOf(Command.PASTE_PGN))
         assertNull(changed.zoneOf(Command.SETTINGS))
         assertNull(changed.copy(tapZonesOn = false).zoneOf(Command.PASTE_PGN))
     }
@@ -68,11 +83,11 @@ class TapZonesTest {
     fun zonesAreSavedWithTheLibrary() {
         val files = Files()
         val vm = AppViewModel(Store(files))
-        vm.setTapZone(TapZone.TOP_LEFT, Command.PASTE_FEN)
+        vm.setTapZone(TapZone(0, 0), Command.PASTE_FEN)
         vm.setTapZonesOn(false)
         vm.setHoldStep(1500)
         val settings = AppViewModel(Store(files)).library.settings
-        assertEquals(Command.PASTE_FEN, settings.commandAt(TapZone.TOP_LEFT))
+        assertEquals(Command.PASTE_FEN, settings.commandAt(TapZone(0, 0)))
         assertEquals(false, settings.tapZonesOn)
         assertEquals(1500, settings.holdStepMs)
     }
@@ -80,10 +95,10 @@ class TapZonesTest {
     @Test
     fun aDoubleTapRunsTheZonesShortcut() {
         val vm = AppViewModel(Store(Files()))
-        vm.tapZone(TapZone.MIDDLE_RIGHT)
+        vm.tapZone(TapZone(1, 1))
         assertEquals(Prefs.Config, vm.prefs)
         // Another shortcut closes the preferences, so it happens where it can be seen.
-        vm.tapZone(TapZone.BOTTOM_LEFT)
+        vm.tapZone(TapZone(0, 2))
         assertNull(vm.prefs)
         assertEquals(Command.PASTE_PGN, vm.paste?.kind)
     }
@@ -112,7 +127,7 @@ class TapZonesTest {
         val zones = mutableListOf<TapZone>()
         var clicks = 0
         ImageComposeScene(300, 600, Density(1f)) {
-            Box(Modifier.fillMaxSize().doubleTapZones { zones += it }) {
+            Box(Modifier.fillMaxSize().doubleTapZones(2, 3) { zones += it }) {
                 Box(Modifier.size(100.dp).clickable { clicks++ })
             }
         }.use { scene ->
@@ -132,7 +147,7 @@ class TapZonesTest {
     fun twoQuickTapsOnAFreeSpotCount() = scene { tap, zones, _ ->
         tap(250f, 550f, 1000)
         tap(252f, 548f, 1150)
-        assertEquals(listOf(TapZone.BOTTOM_RIGHT), zones)
+        assertEquals(listOf(TapZone(1, 2)), zones)
     }
 
     @Test

@@ -74,6 +74,11 @@ const val HOLD_STEP_MIN = 500
 const val HOLD_STEP_MAX = 3000
 const val HOLD_STEP_INCREMENT = 250
 
+/** Bounds and increment for [repertoire.core.Settings.playDelayMs]. */
+const val PLAY_DELAY_MIN = 500
+const val PLAY_DELAY_MAX = 5000
+const val PLAY_DELAY_INCREMENT = 250
+
 /** "1 s", "1,5 s", "0,75 s": German decimals, no trailing zeros. */
 fun formatSeconds(ms: Long): String {
     val whole = ms / 1000
@@ -96,6 +101,7 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     PASTE_FEN('f', "FEN einfügen", 4),
     COPY_FEN('2', "FEN der Stellung kopieren", null),
     COPY_PGN('3', "PGN bis zur Stellung kopieren", null),
+    PLAY('a', "Variante abspielen / anhalten", null),
     SETTINGS('s', "Einstellungen und Hilfe", null),
     ;
 
@@ -271,7 +277,13 @@ fun BoxScope.ShortcutOverlay(vm: AppViewModel) {
             Pill("${settings.prefixLabel} …   " + Command.entries.joinToString("  ·  ") { "${settings.keyOf(it)} ${it.short}" })
         }
     }
-    if (touch) HorseButton(vm.library.settings.holdStepMs, vm::run, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp))
+    val settings = vm.library.settings
+    if (touch && settings.horseOn) {
+        HorseButton(
+            settings.holdStepMs, vm::run,
+            Modifier.align(if (settings.horseLeft) Alignment.BottomStart else Alignment.BottomEnd).padding(horizontal = 16.dp, vertical = 16.dp),
+        )
+    }
 }
 
 internal val Command.short: String get() = when (this) {
@@ -282,6 +294,7 @@ internal val Command.short: String get() = when (this) {
     Command.PASTE_FEN -> "FEN"
     Command.COPY_FEN -> "FEN kopieren"
     Command.COPY_PGN -> "PGN kopieren"
+    Command.PLAY -> "Abspielen"
     Command.SETTINGS -> "Einstellungen"
 }
 
@@ -320,7 +333,7 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
                     val key = when {
                         !touch -> settings.shortcutLabel(command)
                         command.holdSteps != null -> formatSeconds(command.holdSteps.toLong() * settings.holdStepMs) + " halten"
-                        else -> settings.zoneOf(command)?.let { "2× ${it.short}" } ?: ""
+                        else -> settings.zoneOf(command)?.let { "2× ${it.shortLabel(settings.tapCols, settings.tapRows)}" } ?: ""
                     }
                     ShortcutRow(key, command.label) { vm.run(command) }
                 }
