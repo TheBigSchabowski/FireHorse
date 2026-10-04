@@ -7,6 +7,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.Modifier
 
 /**
@@ -15,6 +18,8 @@ import androidx.compose.ui.Modifier
  */
 @Composable
 fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false) {
+    val clipboard = LocalClipboardManager.current
+    SideEffect { vm.copyToClipboard = { clipboard.setText(AnnotatedString(it)) } }
     MaterialTheme(colorScheme = darkColorScheme()) {
         CompositionLocalProvider(LocalTouch provides touch) {
             Surface(modifier = Modifier.fillMaxSize()) {

@@ -245,4 +245,39 @@ class ShortcutsTest {
         vm.key(Key.Slash, '?')
         assertTrue(vm.showShortcuts)
     }
+
+    @Test
+    fun copyingTheBoardGivesFenAndPgnUpToTheCursor() {
+        val vm = app()
+        val copied = mutableListOf<String>()
+        vm.copyToClipboard = { copied += it }
+        vm.run(Command.COPY_FEN)
+        assertTrue(copied.isEmpty(), "ohne Brett nichts kopieren")
+
+        vm.run(Command.NEW_VARIANT)
+        vm.run(Command.COPY_PGN)
+        assertTrue(copied.isEmpty(), "ohne Zug kein PGN")
+        for (uci in listOf("e2e4", "c7c5", "g1f3")) vm.editorPlay(repertoire.core.Move.fromUci(uci))
+        vm.ctrlB()
+        vm.key(Key.Three, '3')
+        assertEquals("1. e4 c5 2. Nf3", copied.last())
+        vm.ctrlB()
+        vm.key(Key.Two, '2')
+        assertEquals("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", copied.last())
+
+        // Half-way through the line it is the position on the board that counts.
+        vm.editor!!.cursor = 2
+        vm.run(Command.COPY_PGN)
+        assertEquals("1. e4 c5", copied.last())
+        vm.run(Command.COPY_FEN)
+        assertEquals("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2", copied.last())
+    }
+
+    @Test
+    fun copiedPgnReadsBackFromASetUpPosition() {
+        val fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+        val line = repertoire.core.Pgn.parse(repertoire.core.Pgn.export(fen, listOf("2. Nf3", "2... d6")))
+        assertEquals(fen, line.startFen)
+        assertEquals(listOf("g1f3", "d7d6"), line.moves)
+    }
 }

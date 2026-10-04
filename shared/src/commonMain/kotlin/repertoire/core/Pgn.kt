@@ -60,6 +60,16 @@ object Pgn {
      */
     private val FEN_DEFAULTS = listOf("w", "KQkq", "-", "0", "1")
 
+    /**
+     * The line as PGN text, for the clipboard: the moves up to some position, numbered, and a
+     * FEN header when it does not begin at the start of a game. Reads back with [parse].
+     */
+    fun export(startFen: String, numberedMoves: List<String>): String {
+        val moves = compactMoves(numberedMoves)
+        val header = if (startFen == Position.START_FEN) "" else "[SetUp \"1\"]\n[FEN \"$startFen\"]\n\n"
+        return header + moves
+    }
+
     /** Reads [text]; throws [IllegalArgumentException] with a German explanation if it does not work out. */
     fun parse(text: String): PastedLine {
         // Web pages hand out non-breaking spaces, and some editors a byte-order mark.

@@ -29,6 +29,7 @@ import repertoire.core.Stats
 import repertoire.core.Store
 import repertoire.core.Variant
 import repertoire.core.newId
+import repertoire.core.numberedSan
 
 enum class FeedbackTone { GOOD, BAD, INFO }
 
@@ -202,6 +203,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.SETTINGS -> prefs = if (prefs == null) Prefs.Config else null
             Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
                 ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
+            Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
             Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
                 editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
                 command == Command.NEW_VARIANT -> {
@@ -209,6 +211,47 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                     newVariant()
                 }
                 else -> paste = PasteState(command)
+            }
+        }
+    }
+
+    /** Puts text on the system clipboard; set by the app window. */
+    var copyToClipboard: ((String) -> Unit)? = null
+
+    /** Where the line on the board began, and the numbered moves ("1. e4", "1... c5") up to the board's position. */
+    private class BoardLine(val startFen: String, val numbered: List<String>, val position: Position)
+
+    /** The position on the board, wherever it is: in the editor (at the cursor) or in a puzzle (with a "@8." preview). */
+    private fun boardLine(): BoardLine? {
+        editor?.let { e ->
+            val numbered = e.positions.zip(e.moves).take(e.cursor).map { (before, move) -> numberedSan(before, move) }
+            return BoardLine(e.startFen, numbered, e.position)
+        }
+        val attempt = session?.attempt ?: return null
+        val variant = attempt.quiz.variant
+        val preview = session?.preview
+        return if (preview != null) {
+            BoardLine(variant.startFen, variant.numberedSan().take(preview), variant.positions[preview])
+        } else {
+            BoardLine(variant.startFen, attempt.played.toList(), attempt.position)
+        }
+    }
+
+    /** Ctrl+B 2 / 3: the FEN of the board, or the PGN of the moves that led there, on the clipboard. */
+    private fun copyBoard(command: Command) {
+        val line = boardLine()
+        val copy = copyToClipboard
+        when {
+            line == null -> flash = "Kopieren geht, sobald ein Brett zu sehen ist."
+            copy == null -> flash = "Hier gibt es keine Zwischenablage."
+            command == Command.COPY_FEN -> {
+                copy(line.position.fen)
+                flash = "FEN kopiert."
+            }
+            line.numbered.isEmpty() && line.startFen == Position.START_FEN -> flash = "Noch kein Zug auf dem Brett."
+            else -> {
+                copy(Pgn.export(line.startFen, line.numbered))
+                flash = "PGN kopiert (${line.numbered.size} Halbzüge)."
             }
         }
     }

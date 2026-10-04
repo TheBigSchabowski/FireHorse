@@ -94,6 +94,8 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     NEW_VARIANT('c', "Neue Variante", 2),
     PASTE_PGN('p', "PGN einfügen", 3),
     PASTE_FEN('f', "FEN einfügen", 4),
+    COPY_FEN('2', "FEN der Stellung kopieren", null),
+    COPY_PGN('3', "PGN bis zur Stellung kopieren", null),
     SETTINGS('s', "Einstellungen und Hilfe", null),
     ;
 
@@ -278,6 +280,8 @@ internal val Command.short: String get() = when (this) {
     Command.NEW_VARIANT -> "Variante"
     Command.PASTE_PGN -> "PGN"
     Command.PASTE_FEN -> "FEN"
+    Command.COPY_FEN -> "FEN kopieren"
+    Command.COPY_PGN -> "PGN kopieren"
     Command.SETTINGS -> "Einstellungen"
 }
 

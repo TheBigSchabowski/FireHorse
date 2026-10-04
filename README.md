@@ -85,6 +85,8 @@ oder ganz ausschalten.
 | `Strg+B p` | 3 Schritte halten | PGN einfügen |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B s` | Doppeltippen Mitte rechts | Einstellungen und Hilfe |
+| `Strg+B 2` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
+| `Strg+B 3` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
 
 Das geht auch mitten in einem Puzzle: die neue Variante legt sich darüber, nach Speichern oder
 Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wird dabei nie
