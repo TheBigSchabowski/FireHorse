@@ -360,7 +360,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             Bullet("Zielstellung zeigen", "blendet die gesuchte Stellung als Hilfe ein.")
             Bullet("↺ Nochmal von vorn", "setzt das Brett zurück; Fehler von vorher zählen trotzdem.")
             Bullet("Falscher Zug", "wird korrigiert, und die Variante kommt bald wieder. Ein Zug aus einer anderen gespeicherten Variante gibt nur einen Hinweis.")
-            Bullet("Gut / Weiter", "am Ende: „Gut“, oder „Weiter“ nach einem Fehler." + if (touch) "" else " Am Mac gehen auch Enter und Leertaste.")
+            Bullet("Gut / Weiter", "am Ende: „Gut“, oder „Weiter“ nach einem Fehler." + if (touch) "" else " Am Computer gehen auch Enter und Leertaste.")
             Bullet("Variante nicht mehr abfragen", "pausiert sie; „Wieder abfragen“ auf der Startseite holt sie zurück.")
             ConfigButton(vm, "Neue pro Tag einstellen")
         }
@@ -379,7 +379,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             Bullet(
                 "Pfeile und Kreise",
                 "ein Feld lange gedrückt halten und auf ein anderes ziehen malt einen Pfeil, loslassen auf demselben Feld kreist es ein" +
-                    (if (touch) "." else "; am Mac geht auch die rechte Maustaste.") +
+                    (if (touch) "." else "; am Computer geht auch die rechte Maustaste.") +
                     " Derselbe Pfeil nochmal nimmt ihn wieder weg; mit dem nächsten Zug oder der nächsten Berührung des Bretts ist alles wieder sauber.",
             )
             Bullet(
@@ -391,7 +391,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             Para("Gezeichnetes wird nicht gespeichert. Das gilt im Editor wie beim Üben.")
         }
         HelpTopic.HORSE -> {
-            Para("Unten rechts sitzt ein kleines Pferd. Es ersetzt am Handy die Tastenkürzel vom Mac.")
+            Para("Unten rechts sitzt ein kleines Pferd. Es ersetzt am Handy die Tastenkürzel vom Computer.")
             Bullet("Antippen", "öffnet die Liste aller Kürzel; jeder Eintrag lässt sich dort auch direkt antippen.")
             Bullet("Halten", "wählt nach der Zeit. Der Ring ums Pferd füllt sich einmal pro Schritt, und daneben steht, was beim Loslassen passiert.")
             Bullet("Wegziehen", "den Finger vom Pferd wegziehen bricht ab.")
@@ -437,7 +437,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
         HelpTopic.DATA -> {
             Para("Alles wird nach jeder Änderung und jeder Antwort sofort gespeichert, in: ${vm.dataLocation}")
             if (vm.canTransfer) {
-                Bullet("Alle exportieren", "schreibt Varianten und Lernstand in eine .json-Datei, z. B. um sie vom Mac aufs Handy zu bringen. „Exportieren“ bei einer Eröffnung auf der Startseite nimmt nur diese.")
+                Bullet("Alle exportieren", "schreibt Varianten und Lernstand in eine .json-Datei, z. B. um sie vom Computer aufs Handy zu bringen. „Exportieren“ bei einer Eröffnung auf der Startseite nimmt nur diese.")
                 Bullet("Importieren", "holt eine solche Datei herein: neue Varianten kommen dazu, vorhandene werden aktualisiert.")
             }
             if (touch) Para("Achtung: Deinstallieren löscht den App-Speicher und damit den Lernstand. Vorher exportieren.")

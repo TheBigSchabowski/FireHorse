@@ -1,12 +1,16 @@
 package repertoire.desktop
 
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -14,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import repertoire.core.DirectoryStore
 import repertoire.core.FilePicker
 import repertoire.core.Store
+import repertoire.core.UserDirs
 import repertoire.ui.App
 import repertoire.ui.AppViewModel
 import java.awt.FileDialog
@@ -23,12 +28,13 @@ import java.io.File
 fun main() = application {
     val viewModel = remember {
         val dir = System.getProperty("repertoire.dataDir")?.let(::File)
-            ?: File(System.getProperty("user.home"), "Documents/EroeffnungsPuzzle")
+            ?: File(UserDirs.documents(), "EroeffnungsPuzzle")
         AppViewModel(Store(DirectoryStore(dir)), DialogFilePicker)
     }
     Window(
         onCloseRequest = ::exitApplication,
         title = "FireHorse",
+        icon = remember(::windowIcon),
         // -Dwindow.size=393x852 opens at phone size, to check the narrow layout that Android uses.
         state = System.getProperty("window.size")?.split("x")?.map { it.toInt().dp }
             ?.let { (w, h) -> rememberWindowState(width = w, height = h) }
@@ -62,9 +68,13 @@ fun main() = application {
     }
 }
 
-/** The native macOS save / open dialogs. */
+/** The title bar and task bar icon on Linux and Windows; the Mac takes the one of the app bundle. */
+private fun windowIcon(): Painter? =
+    if (System.getProperty("os.name").startsWith("Mac")) null else useResource("icon.png") { BitmapPainter(loadImageBitmap(it)) }
+
+/** The system's save / open dialogs. */
 private object DialogFilePicker : FilePicker {
-    private var lastDir: String = File(System.getProperty("user.home"), "Downloads").path
+    private var lastDir: String = UserDirs.downloads().path
 
     private fun choose(title: String, mode: Int, name: String? = null): File? {
         val dialog = FileDialog(null as Frame?, title, mode)
