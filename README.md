@@ -27,6 +27,11 @@ und legt „FireHorse“ ins Anwendungsmenü (unter „Spiele“); gestartet wir
 Das tar.gz einfach entpacken und `FireHorse/bin/FireHorse` starten. Gebraucht wird eine Desktop-Umgebung
 mit X11 oder Wayland (XWayland) und OpenGL (`libgl1`), wie sie jede Desktop-Installation mitbringt.
 
+**Arch Linux:** Das DEB ist ein Debian-Paket und geht dort nicht direkt (nur über `debtap`). Nimm das tar.gz:
+`tar xzf FireHorse_<version>_linux-amd64.tar.gz`, dann `./FireHorse/bin/FireHorse`. Java ist schon dabei.
+Bricht der Start mit Grafikfehlern ab, fehlt meist `mesa` bzw. der Grafiktreiber. Einen Menüeintrag gibt es
+dabei nicht, dafür müsstest du selbst eine `.desktop`-Datei anlegen.
+
 **Android:** APK im Browser auf dem Handy herunterladen und öffnen, dann „Aus dieser Quelle
 installieren“ erlauben.
 
