@@ -81,6 +81,11 @@ class TrainingSession(
     val done: Boolean get() = attempt?.finished == true && (gapResults != null || gaps.isEmpty())
 }
 
+/** Variants played one after the other in the editor: an opening's, or the selected ones; [index] is the one that is open. */
+data class Playlist(val title: String, val ids: List<String>, val index: Int = 0) {
+    val last: Boolean get() = index == ids.lastIndex
+}
+
 /** A variant being entered: play the moves, then name it. */
 class EditorState(
     val editingId: String?,
@@ -94,6 +99,8 @@ class EditorState(
     startFen: String = Position.START_FEN,
     /** Shown above the board, e.g. what a pasted PGN turned into. */
     val note: String? = null,
+    /** Set while a playlist runs: at the end of the line the player goes on with the next variant. */
+    val playlist: Playlist? = null,
 ) {
     var opening by mutableStateOf(opening)
     var name by mutableStateOf(name)
@@ -377,31 +384,51 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     /** Opens a saved variant; [fromStart] puts the board at move zero to step through the line. */
-    fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false) {
-        editor = EditorState(v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart || play, v.startFen)
+    fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false, playlist: Playlist? = null) {
+        editor = EditorState(
+            v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart || play, v.startFen,
+            playlist = playlist,
+        )
         if (play) editor?.playing = v.moves.isNotEmpty()
     }
 
     /** Starts or stops the player; at the end of the line it starts over from the beginning. */
     fun editorTogglePlay() {
         val e = editor ?: return
-        if (e.playing) {
-            e.playing = false
-        } else if (e.moves.isNotEmpty()) {
-            if (e.atEnd) e.cursor = 0
-            e.playing = true
+        val p = e.playlist
+        when {
+            e.playing -> e.playing = false
+            e.moves.isEmpty() -> Unit
+            // The playlist is through: once more from its first variant.
+            p != null && p.last && e.atEnd && !editorChanged() -> openPlaylist(p.copy(index = 0), play = true)
+            else -> {
+                if (e.atEnd) e.cursor = 0
+                e.playing = true
+            }
         }
     }
 
-    /** One step of the player, after the delay: the next move, or the end: start over or stop. */
+    /** One step of the player, after the delay: the next move, or the end: the next variant of a playlist, start over or stop. */
     fun editorPlayTick() {
         val e = editor ?: return
+        val p = e.playlist
         when {
             !e.playing -> Unit
             !e.atEnd -> e.cursor++
-            library.settings.playLoop -> e.cursor = 0
+            // Changes would be thrown away by the next variant, so the player waits for them to be saved.
+            p != null && editorChanged() -> e.playing = false
+            p != null && !p.last -> openPlaylist(p.copy(index = p.index + 1), play = true)
+            p != null && library.settings.playLoop -> openPlaylist(p.copy(index = 0), play = true)
+            p == null && library.settings.playLoop -> e.cursor = 0
             else -> e.playing = false
         }
+    }
+
+    /** The open variant differs from the saved one, or is not saved at all. */
+    private fun editorChanged(): Boolean {
+        val e = editor ?: return false
+        val saved = library.variants.firstOrNull { it.id == e.editingId } ?: return true
+        return saved != e.asVariant()
     }
 
     /**
@@ -526,6 +553,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         updateLibrary { lib ->
             lib.copy(variants = if (old != null) lib.variants.map { if (it.id == id) variant else it } else lib.variants + variant)
         }
+        // A pinned opening whose last variant got a new opening name stays pinned under that name.
+        val oldOpening = old?.let(Library::openingOf)
+        if (oldOpening != null && oldOpening in library.pinned && library.variants.none { Library.openingOf(it) == oldOpening }) {
+            val newOpening = Library.openingOf(variant)
+            updateLibrary { lib -> lib.copy(pinned = lib.pinned.map { if (it == oldOpening) newOpening else it }.distinct()) }
+        }
         // Different moves means a different puzzle: start learning it from scratch.
         if (old != null && !old.sameLine(variant)) saveProgress(progress.copy(cards = progress.cards - id))
         editor = null
@@ -535,10 +568,120 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         editor = null
     }
 
-    fun deleteVariant(id: String) {
-        updateLibrary { lib -> lib.copy(variants = lib.variants.filterNot { it.id == id }) }
-        saveProgress(progress.copy(cards = progress.cards - id))
+    // ---- Openings: pinning and playlists -------------------------------------------------
+
+    /** Pins [opening] to the top of the home screen, or unpins it; at most [Library.MAX_PINNED] at a time. */
+    fun togglePin(opening: String) {
+        if (opening in library.pinned) {
+            updateLibrary { it.copy(pinned = it.pinned - opening) }
+            return
+        }
+        // Pins of openings without variants (renamed or deleted) do not count.
+        val live = library.groups().filter { it.pinned }.map { it.opening }
+        if (live.size >= Library.MAX_PINNED) {
+            flash = "Höchstens ${Library.MAX_PINNED} Eröffnungen lassen sich anpinnen – löse erst eine."
+            return
+        }
+        updateLibrary { it.copy(pinned = live + opening) }
     }
+
+    private fun variantsOf(opening: String): List<Variant> =
+        library.groups().firstOrNull { it.opening == opening }?.variants ?: emptyList()
+
+    /** Plays every variant of [opening] in the editor, one after the other, in the order of the list. */
+    fun playPlaylist(opening: String) = playVariants(opening, variantsOf(opening))
+
+    private fun playVariants(title: String, variants: List<Variant>) {
+        if (variants.isNotEmpty()) openPlaylist(Playlist(title, variants.map { it.id }), play = true)
+    }
+
+    /** The previous or next variant of the running playlist; the player keeps running if it was. */
+    fun playlistStep(by: Int) {
+        val e = editor ?: return
+        val p = e.playlist ?: return
+        val index = p.index + by
+        if (index !in p.ids.indices) return
+        if (editorChanged()) {
+            flash = "Erst speichern oder abbrechen – sonst gehen die Änderungen verloren."
+            return
+        }
+        openPlaylist(p.copy(index = index), play = e.playing)
+    }
+
+    private fun openPlaylist(p: Playlist, play: Boolean) {
+        val v = library.variants.firstOrNull { it.id == p.ids[p.index] }
+        if (v == null) {
+            // Deleted in the meantime: the player just stops.
+            editor?.playing = false
+            return
+        }
+        editVariant(v, fromStart = true, play = play, playlist = p)
+    }
+
+    /** Every variant of [opening] as a puzzle, one after the other in the order of the list, without grading. */
+    fun practicePlaylist(opening: String) = practiceVariants(variantsOf(opening))
+
+    private fun practiceVariants(variants: List<Variant>) {
+        val all = quizzes
+        val drills = variants.mapNotNull { v -> all.firstOrNull { it.variant.id == v.id } }.map(::Drill)
+        if (drills.isNotEmpty()) start(TrainingSession("Playlist", graded = false, ArrayDeque(drills)))
+    }
+
+    /** All variants of [opening] with their learning state, and its pin. */
+    fun deleteOpening(opening: String) {
+        deleteVariants(variantsOf(opening).map { it.id }.toSet())
+    }
+
+    fun deleteVariant(id: String) = deleteVariants(setOf(id))
+
+    private fun deleteVariants(ids: Set<String>) {
+        updateLibrary { lib ->
+            val variants = lib.variants.filterNot { it.id in ids }
+            val left = variants.map(Library::openingOf).toSet()
+            lib.copy(variants = variants, pinned = lib.pinned.filter { it in left })
+        }
+        saveProgress(progress.copy(cards = progress.cards - ids))
+        selected = selected?.minus(ids)
+    }
+
+    // ---- Selecting variants on the home screen -------------------------------------------
+
+    /** Ids of the ticked variants while selecting; null when not selecting. */
+    var selected by mutableStateOf<Set<String>?>(null)
+        private set
+
+    /** The ticked variants in the order of the home screen. */
+    private val selectedVariants: List<Variant>
+        get() = selected?.let { ids -> library.groups().flatMap { it.variants }.filter { it.id in ids } } ?: emptyList()
+
+    /** Shows a tick box at every variant; with [opening], its variants start out ticked. */
+    fun startSelecting(opening: String? = null) {
+        selected = opening?.let { o -> variantsOf(o).map { it.id }.toSet() } ?: emptySet()
+    }
+
+    fun endSelecting() {
+        selected = null
+    }
+
+    fun toggleSelected(id: String) {
+        val s = selected ?: return
+        selected = if (id in s) s - id else s + id
+    }
+
+    /** Ticks every variant of [opening], or unticks them all if they already are. */
+    fun toggleSelectedOpening(opening: String) {
+        val s = selected ?: return
+        val ids = variantsOf(opening).map { it.id }.toSet()
+        selected = if (s.containsAll(ids)) s - ids else s + ids
+    }
+
+    fun deleteSelected() {
+        deleteVariants(selected ?: return)
+    }
+
+    fun playSelected() = playVariants("Auswahl", selectedVariants)
+
+    fun practiceSelected() = practiceVariants(selectedVariants)
 
     fun unsuspend(id: String) {
         val s = progress.cards[id] ?: return
@@ -783,7 +926,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** Saves [opening]'s variants (all if null), with their learning state, as a JSON file. */
     fun export(opening: String? = null) {
         val picker = files ?: return
-        val variants = library.variants.filter { opening == null || it.opening.ifBlank { "Ohne Eröffnung" } == opening }
+        val variants = library.variants.filter { opening == null || Library.openingOf(it) == opening }
         val name = "eroeffnungen-" + (opening?.let(::fileSafe) ?: "alle") + ".json"
         picker.save(name, Exchange.export(variants, progress)) { file ->
             if (file != null) message = "${variants.size} Variante(n) exportiert: $file"

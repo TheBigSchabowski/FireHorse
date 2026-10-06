@@ -38,7 +38,28 @@ data class Settings(
 data class Library(
     val variants: List<Variant> = emptyList(),
     val settings: Settings = Settings(),
-)
+    /** Openings (as [openingOf] names them) shown first on the home screen, in the order they were pinned. */
+    val pinned: List<String> = emptyList(),
+) {
+    /** The variants by opening: the pinned openings first, then the others alphabetically; each in the order it was created. */
+    fun groups(): List<OpeningGroup> {
+        val byOpening = variants.groupBy(::openingOf)
+        val pins = pinned.filter { it in byOpening }
+        val rest = (byOpening.keys - pins.toSet()).sortedWith(String.CASE_INSENSITIVE_ORDER)
+        return pins.map { OpeningGroup(it, byOpening.getValue(it), pinned = true) } +
+            rest.map { OpeningGroup(it, byOpening.getValue(it), pinned = false) }
+    }
+
+    companion object {
+        const val MAX_PINNED = 3
+        const val NO_OPENING = "Ohne Eröffnung"
+
+        fun openingOf(v: Variant): String = v.opening.ifBlank { NO_OPENING }
+    }
+}
+
+/** One opening on the home screen, also the playlist that goes through all of its variants. */
+data class OpeningGroup(val opening: String, val variants: List<Variant>, val pinned: Boolean)
 
 @Serializable
 data class Progress(

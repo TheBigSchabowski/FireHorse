@@ -50,13 +50,24 @@ import repertoire.core.numberedSan
 fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier) {
     val position = e.position
     Column(modifier.fillMaxSize().padding(16.dp)) {
+        val playlist = e.playlist
         Text(
-            if (e.editingId == null) "Neue Variante" else "Variante bearbeiten",
+            when {
+                playlist != null -> "Playlist: ${playlist.title} · ${playlist.index + 1} von ${playlist.ids.size}"
+                e.editingId == null -> "Neue Variante"
+                else -> "Variante bearbeiten"
+            },
             style = MaterialTheme.typography.titleLarge,
         )
         e.note?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF90CAF9))
+        }
+        if (playlist != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { vm.playlistStep(-1) }, enabled = playlist.index > 0) { Text("← Vorherige") }
+                TextButton(onClick = { vm.playlistStep(1) }, enabled = !playlist.last) { Text("Nächste →") }
+            }
         }
         Spacer(Modifier.height(12.dp))
         BoardWithPanel(
@@ -161,9 +172,10 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
 @Composable
 private fun Player(vm: AppViewModel, e: EditorState) {
     val settings = vm.library.settings
-    LaunchedEffect(e.playing, e.cursor, settings.playDelayMs) {
+    LaunchedEffect(e, e.playing, e.cursor, settings.playDelayMs) {
         if (!e.playing) return@LaunchedEffect
-        delay(settings.playDelayMs.toLong())
+        // In a playlist the final position stays twice as long, before the next variant starts.
+        delay(settings.playDelayMs.toLong() * if (e.playlist != null && e.atEnd) 2 else 1)
         vm.editorPlayTick()
     }
     FlowRow(

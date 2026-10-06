@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import repertoire.core.Library
 import repertoire.core.Settings
 
 /** The preferences screen: the configuration, or the help with an optional topic open. */
@@ -65,6 +66,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     THEORY("Theorie und Lücken", "Notizen zur Variante, die beim Üben abgefragt werden"),
     BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus"),
     PLAYER("Abspielen", "Eine Variante von allein durchlaufen lassen, Tempo, Wiederholen"),
+    PLAYLIST("Playlist, Anpinnen, Auswählen", "Varianten nacheinander, wichtige Eröffnungen nach oben, mehrere auf einmal löschen"),
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
     TAP_ZONES("Doppeltippen", "Bereiche des Bildschirms für Kürzel, Raster frei wählbar", touch = true),
     KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
@@ -469,6 +471,16 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                     " Das Gleiche stellst du auch in der Konfiguration ein.",
             )
             ConfigButton(vm, "Tempo einstellen")
+        }
+        HelpTopic.PLAYLIST -> {
+            Para("Jede Eröffnung auf der Startseite ist auch eine Playlist: alle ihre Varianten in der Reihenfolge der Liste, ohne dass du jede einzeln anklickst.")
+            Bullet("▶ Playlist", "spielt die Varianten nacheinander mit dem Player ab. Die Endstellung bleibt kurz stehen, dann beginnt die nächste Variante. „← Vorherige“ und „Nächste →“ springen, ⏸ hält an. Mit „Wiederholen“ fängt sie nach der letzten Variante von vorn an.")
+            Bullet("Playlist üben", "fragt die Varianten nacheinander als Puzzle ab, ohne Wertung. Eine Variante mit Fehler kommt kurz danach noch einmal.")
+            Bullet("Anpinnen", "holt eine Eröffnung ganz nach oben, über alle anderen. Bis zu ${Library.MAX_PINNED} Eröffnungen gehen; „Lösen“ stellt sie wieder an ihren Platz.")
+            Para("Lernen mit Spaced Repetition bleibt davon unberührt: Playlists zählen nicht als Wiederholung.")
+            SubHeading("Auswählen und Löschen")
+            Bullet("Auswählen", "bei einer Eröffnung zeigt an jeder Variante ein Kästchen; " + (if (touch) "antippen" else "anklicken") + " wählt sie aus. „Alle auswählen“ nimmt eine ganze Eröffnung dazu. Oben steht dann, was mit der Auswahl geht: als Playlist abspielen oder üben, oder löschen. „Fertig“ beendet das Auswählen.")
+            Bullet("Löschen", "bei einer Eröffnung löscht sie mit allen Varianten. Wie beim Löschen einer Variante fragt die App erst nach, und der Lernstand ist danach weg.")
         }
         HelpTopic.HORSE -> {
             Para("Unten rechts sitzt ein kleines Pferd. Es ersetzt am Handy die Tastenkürzel vom Computer.")

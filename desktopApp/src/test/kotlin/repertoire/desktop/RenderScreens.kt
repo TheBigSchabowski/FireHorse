@@ -184,5 +184,34 @@ fun main() {
         vm.sample()
         vm.openHelp(HelpTopic.TAP_ZONES)
     }
+    fun AppViewModel.twoOpenings() {
+        sample()
+        addVariant("Four Knights", "Scotch Game Bb4 Main line", "e4 e5 Nf3 Nc6 Nc3 Nf6 d4 exd4 Nxd4 Bb4")
+        addVariant("Four Knights", "Scotch Game Nxe5", "e4 e5 Nf3 Nc6 Nc3 Nf6 d4 Nxd4")
+    }
+    render("angepinnt") { vm ->
+        vm.twoOpenings()
+        vm.togglePin("Four Knights")
+    }
+    render("playlist") { vm ->
+        vm.twoOpenings()
+        vm.playPlaylist("Four Knights")
+        repeat(11 + 3) { vm.editorPlayTick() }
+    }
+    render("playlist-ueben") { vm ->
+        vm.twoOpenings()
+        vm.practicePlaylist("Four Knights")
+    }
+    render("auswahl") { vm ->
+        vm.twoOpenings()
+        vm.togglePin("Four Knights")
+        vm.startSelecting()
+        vm.toggleSelectedOpening("Four Knights")
+        vm.toggleSelected(vm.library.variants.first().id)
+    }
+    render("hilfe-playlist") { vm ->
+        vm.sample()
+        vm.openHelp(HelpTopic.PLAYLIST)
+    }
     println("Screens in ${out.absolutePath}")
 }

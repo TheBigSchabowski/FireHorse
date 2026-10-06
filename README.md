@@ -51,6 +51,15 @@ installieren“ erlauben.
   Variante läuft von allein Zug für Zug ab, z. B. wenn du eine Zugfolge vergessen hast. ⏸ hält an,
   `−`/`+` ändern die Zeit pro Zug (0,5 bis 5 s), „Wiederholen“ beginnt am Ende von vorn. Jeder Klick
   aufs Brett, auf einen Pfeil oder einen Zug hält den Player ebenfalls an.
+- **Playlist:** jede Eröffnung ist eine Playlist aus all ihren Varianten. **▶ Playlist** spielt sie
+  nacheinander mit dem Player ab (die Endstellung bleibt kurz stehen, dann kommt die nächste;
+  „← Vorherige“ / „Nächste →“ springen), **Playlist üben** fragt sie nacheinander als Puzzle ab, ohne
+  Wertung. Lernen mit Spaced Repetition bleibt davon unberührt.
+- **Anpinnen:** holt eine Eröffnung ganz nach oben auf der Startseite, bis zu drei gleichzeitig.
+  „Lösen“ stellt sie wieder an ihren Platz.
+- **Auswählen:** zeigt an jeder Variante ein Kästchen; „Alle auswählen“ nimmt eine ganze Eröffnung
+  dazu. Die Auswahl lässt sich als Playlist abspielen oder üben, oder auf einmal löschen.
+  **Löschen** bei einer Eröffnung löscht sie samt allen Varianten (mit Rückfrage).
 - **Durchgehen:** öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶|, den Pfeiltasten ← → oder einem Klick
   auf einen Zug in der Liste gehst du die Züge durch — nichts wird dabei gelöscht.
 - **Bearbeiten:** dasselbe Brett, nur gleich bei der Endstellung. Ein Zug mitten in der Variante

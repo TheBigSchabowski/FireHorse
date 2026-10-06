@@ -1,5 +1,6 @@
 package repertoire.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -16,10 +17,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,68 +39,150 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import repertoire.core.OpeningGroup
 import repertoire.core.Variant
 import repertoire.core.compactMoves
 import repertoire.core.currentTimeMillis
 import repertoire.core.shortDate
 
+private val DELETE_COLOR = Color(0xFFE57373)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val stats = vm.stats()
-    Column(modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("FireHorse", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { vm.openHelp() }) { Text("Hilfe") }
-            TextButton(onClick = vm::openConfig) { Text("Einstellungen") }
-        }
-        Spacer(Modifier.height(16.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }
-            OutlinedButton(onClick = vm::startCram, enabled = stats.total > 0) { Text("Frei üben") }
-            FilledTonalButton(onClick = { vm.newVariant() }) { Text("+ Neue Variante") }
-            OutlinedButton(onClick = vm::openPaste) { Text("PGN/FEN einfügen") }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text("${stats.due} fällig · ${stats.new} neu · ${stats.total} Varianten", style = MaterialTheme.typography.bodyMedium)
+    Column(modifier.fillMaxSize()) {
+        // Stays on top while scrolling, so ticking variants further down needs no way back up.
+        vm.selected?.let { SelectionBar(vm, it) }
+        Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp).verticalScroll(rememberScrollState())) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("FireHorse", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = { vm.openHelp() }) { Text("Hilfe") }
+                TextButton(onClick = vm::openConfig) { Text("Einstellungen") }
+            }
+            Spacer(Modifier.height(16.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = vm::startLearning, enabled = stats.due + stats.new > 0) { Text("Lernen") }
+                OutlinedButton(onClick = vm::startCram, enabled = stats.total > 0) { Text("Frei üben") }
+                FilledTonalButton(onClick = { vm.newVariant() }) { Text("+ Neue Variante") }
+                OutlinedButton(onClick = vm::openPaste) { Text("PGN/FEN einfügen") }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("${stats.due} fällig · ${stats.new} neu · ${stats.total} Varianten", style = MaterialTheme.typography.bodyMedium)
 
-        Spacer(Modifier.height(20.dp))
-        if (vm.library.variants.isEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            if (vm.library.variants.isEmpty()) {
+                Text(
+                    "Noch keine Varianten. Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen – " +
+                        "oder füg mit „PGN/FEN einfügen“ eine Zugfolge ein, die du irgendwo gefunden hast.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            val groups = vm.library.groups()
+            val anyPinned = groups.any { it.pinned }
+            groups.forEachIndexed { i, group ->
+                // With pins, the list falls into two parts: what matters now, and the rest.
+                if (anyPinned && (i == 0 || group.pinned != groups[i - 1].pinned)) {
+                    Text(
+                        if (group.pinned) "ANGEPINNT" else "WEITERE ERÖFFNUNGEN",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                OpeningHeader(vm, group)
+                Spacer(Modifier.height(8.dp))
+                for (v in group.variants) {
+                    VariantRow(vm, v)
+                    Spacer(Modifier.height(8.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            vm.message?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+            }
             Text(
-                "Noch keine Varianten. Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen – " +
-                    "oder füg mit „PGN/FEN einfügen“ eine Zugfolge ein, die du irgendwo gefunden hast.",
+                if (LocalTouch.current) {
+                    "Das Pferd unten rechts und zweimal Tippen auf eine freie Stelle führen Kürzel aus. " +
+                        "Wie alles funktioniert, steht unter Einstellungen → Hilfe."
+                } else {
+                    "${vm.library.settings.shortcutLabel(Command.SHORTCUTS)} zeigt alle Tastenkürzel. Wie alles funktioniert, steht unter Einstellungen → Hilfe."
+                },
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            HorseClearance()
         }
-        val groups = vm.library.variants.groupBy { it.opening.ifBlank { "Ohne Eröffnung" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
-        for ((opening, variants) in groups) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(opening, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                if (vm.canTransfer) TextButton(onClick = { vm.export(opening) }) { Text("Exportieren") }
-            }
-            Spacer(Modifier.height(8.dp))
-            for (v in variants) {
-                VariantRow(vm, v)
-                Spacer(Modifier.height(8.dp))
-            }
-            Spacer(Modifier.height(12.dp))
-        }
+    }
+}
 
-        vm.message?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(12.dp))
+/** What can be done with the ticked variants, above the list while selecting. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    val n = selected.size
+    if (n == 0) confirmDelete = false
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (n == 0) "Varianten antippen, um sie auszuwählen" else "$n ausgewählt",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+                TextButton(onClick = vm::endSelecting) { Text("Fertig") }
+            }
+            FlowRow {
+                TextButton(onClick = vm::playSelected, enabled = n > 0) { Text("▶ Playlist") }
+                TextButton(onClick = vm::practiceSelected, enabled = n > 0) { Text("Playlist üben") }
+                if (confirmDelete) {
+                    TextButton(onClick = { vm.deleteSelected(); confirmDelete = false }) {
+                        Text("Wirklich $n löschen", color = DELETE_COLOR)
+                    }
+                    TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
+                } else {
+                    TextButton(onClick = { confirmDelete = true }, enabled = n > 0) { Text("Löschen") }
+                }
+            }
         }
-        Text(
-            if (LocalTouch.current) {
-                "Das Pferd unten rechts und zweimal Tippen auf eine freie Stelle führen Kürzel aus. " +
-                    "Wie alles funktioniert, steht unter Einstellungen → Hilfe."
-            } else {
-                "${vm.library.settings.shortcutLabel(Command.SHORTCUTS)} zeigt alle Tastenkürzel. Wie alles funktioniert, steht unter Einstellungen → Hilfe."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        HorseClearance()
+    }
+}
+
+/** Name of the opening and what goes for all its variants: the playlist, pinning, export. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OpeningHeader(vm: AppViewModel, group: OpeningGroup) {
+    var confirmDelete by remember(group.opening) { mutableStateOf(false) }
+    val count = group.variants.size
+    Text(group.opening, style = MaterialTheme.typography.titleLarge)
+    Text(
+        "$count " + (if (count == 1) "Variante" else "Varianten"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val selected = vm.selected
+    if (selected != null) {
+        val all = group.variants.all { it.id in selected }
+        TextButton(onClick = { vm.toggleSelectedOpening(group.opening) }) { Text(if (all) "Keine auswählen" else "Alle auswählen") }
+        return
+    }
+    FlowRow {
+        TextButton(onClick = { vm.playPlaylist(group.opening) }) { Text("▶ Playlist") }
+        TextButton(onClick = { vm.practicePlaylist(group.opening) }) { Text("Playlist üben") }
+        TextButton(onClick = { vm.togglePin(group.opening) }) { Text(if (group.pinned) "Lösen" else "Anpinnen") }
+        TextButton(onClick = { vm.startSelecting() }) { Text("Auswählen") }
+        if (vm.canTransfer) TextButton(onClick = { vm.export(group.opening) }) { Text("Exportieren") }
+        if (confirmDelete) {
+            TextButton(onClick = { vm.deleteOpening(group.opening) }) {
+                Text(if (count == 1) "Wirklich löschen" else "Wirklich alle $count löschen", color = DELETE_COLOR)
+            }
+            TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
+        } else {
+            TextButton(onClick = { confirmDelete = true }) { Text("Löschen") }
+        }
     }
 }
 
@@ -111,6 +196,24 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
         review.suspended -> "pausiert"
         review.due <= currentTimeMillis() -> "fällig"
         else -> "nächste Abfrage " + shortDate(review.due)
+    }
+    val selected = vm.selected
+    if (selected != null) {
+        // While selecting, a tap anywhere on the card ticks it; the variant's own buttons make way.
+        Card(Modifier.fillMaxWidth().clickable { vm.toggleSelected(v.id) }) {
+            Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = v.id in selected, onCheckedChange = { vm.toggleSelected(v.id) })
+                Column(Modifier.padding(end = 12.dp)) {
+                    Text(v.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        compactMoves(v.numberedSan()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        return
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -137,7 +240,7 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
                 TextButton(onClick = { vm.newVariant(template = v) }) { Text("Weiterführen") }
                 TextButton(onClick = { vm.editVariant(v) }) { Text("Bearbeiten") }
                 if (confirmDelete) {
-                    TextButton(onClick = { vm.deleteVariant(v.id) }) { Text("Wirklich löschen", color = Color(0xFFE57373)) }
+                    TextButton(onClick = { vm.deleteVariant(v.id) }) { Text("Wirklich löschen", color = DELETE_COLOR) }
                     TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
                 } else {
                     TextButton(onClick = { confirmDelete = true }) { Text("Löschen") }
