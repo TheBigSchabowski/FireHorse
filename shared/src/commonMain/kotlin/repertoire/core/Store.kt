@@ -40,7 +40,13 @@ data class Library(
     val settings: Settings = Settings(),
     /** Openings (as [openingOf] names them) shown first on the home screen, in the order they were pinned. */
     val pinned: List<String> = emptyList(),
+    /** Playlists put together by hand, from any openings. */
+    val playlists: List<SavedPlaylist> = emptyList(),
 ) {
+    /** The variants of [playlist] in its order; ones deleted in the meantime are left out. */
+    fun variantsOf(playlist: SavedPlaylist): List<Variant> =
+        playlist.variantIds.mapNotNull { id -> variants.firstOrNull { it.id == id } }
+
     /** The variants by opening: the pinned openings first, then the others alphabetically; each in the order it was created. */
     fun groups(): List<OpeningGroup> {
         val byOpening = variants.groupBy(::openingOf)
@@ -57,6 +63,10 @@ data class Library(
         fun openingOf(v: Variant): String = v.opening.ifBlank { NO_OPENING }
     }
 }
+
+/** A playlist of its own: any variants, from any openings, in the order given. */
+@Serializable
+data class SavedPlaylist(val id: String, val name: String, val variantIds: List<String>)
 
 /** One opening on the home screen, also the playlist that goes through all of its variants. */
 data class OpeningGroup(val opening: String, val variants: List<Variant>, val pinned: Boolean)

@@ -72,7 +72,11 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(session.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Text(
-                "erledigt ${session.answered} · noch ${session.queue.size + if (attempt != null) 1 else 0}",
+                if (session.untilClean) {
+                    "Puzzle ${minOf(session.solved + 1, session.total)} von ${session.total}"
+                } else {
+                    "erledigt ${session.answered} · noch ${session.queue.size + if (attempt != null) 1 else 0}"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(end = 16.dp),
             )
@@ -173,6 +177,17 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                         OutlinedButton(onClick = { vm.grade(Grade.HARD) }) { Text("Schwer") }
                         Button(onClick = { vm.grade(Grade.GOOD) }) { Text("Gut ⏎") }
                         OutlinedButton(onClick = { vm.grade(Grade.EASY) }) { Text("Leicht") }
+                    }
+                } else if (session.untilClean) {
+                    // Learning a playlist: on only after a clean solve.
+                    Button(onClick = { vm.grade() }) {
+                        Text(
+                            when {
+                                vm.mistakes(session) > 0 -> "Nochmal ⏎"
+                                session.queue.isEmpty() -> "Gut – fertig ⏎"
+                                else -> "Gut – nächstes Puzzle ⏎"
+                            },
+                        )
                     }
                 } else {
                     Button(onClick = { vm.grade() }) { Text("Weiter ⏎") }

@@ -24,6 +24,7 @@ import repertoire.core.Quiz
 import repertoire.core.QuizAttempt
 import repertoire.core.QuizBuilder
 import repertoire.core.ReviewState
+import repertoire.core.SavedPlaylist
 import repertoire.core.Scheduler
 import repertoire.core.Stats
 import repertoire.core.Store
@@ -46,7 +47,15 @@ class TrainingSession(
     val title: String,
     val graded: Boolean,
     val queue: ArrayDeque<Drill>,
+    /** A playlist being learned: a puzzle with a mistake comes again right away, the next one only after a clean solve. */
+    val untilClean: Boolean = false,
 ) {
+    /** Puzzles at the start, for "Puzzle 2 von 5". */
+    val total: Int = queue.size
+
+    /** Puzzles solved without a mistake, so far. */
+    var solved by mutableIntStateOf(0)
+
     var attempt by mutableStateOf<QuizAttempt?>(null)
 
     /** Bumped after every move because [QuizAttempt] itself is not observable. */
@@ -150,6 +159,11 @@ class EditorState(
     /** The variant as it would be saved, for checks that work on a [Variant]. */
     fun asVariant(): Variant =
         Variant(editingId ?: "", opening, name, moves.map { it.uci }, playWhite, theory.text, startFen)
+}
+
+/** The dialog that asks for a playlist's name: a new one from the selection ([playlistId] null), or a new name. */
+class PlaylistNaming(val playlistId: String?, name: String = "") {
+    var text by mutableStateOf(name)
 }
 
 /** The "PGN/FEN einfügen" dialog: paste the text, read it, then carry on in the editor. */
@@ -618,13 +632,111 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         editVariant(v, fromStart = true, play = play, playlist = p)
     }
 
-    /** Every variant of [opening] as a puzzle, one after the other in the order of the list, without grading. */
-    fun practicePlaylist(opening: String) = practiceVariants(variantsOf(opening))
+    /**
+     * Every variant of [opening] as a puzzle, one after the other in the order of the list: the next
+     * one comes only once the current one is solved without a mistake. Not graded.
+     */
+    fun learnPlaylist(opening: String) = learnVariants(variantsOf(opening))
 
-    private fun practiceVariants(variants: List<Variant>) {
+    private fun learnVariants(variants: List<Variant>) {
         val all = quizzes
         val drills = variants.mapNotNull { v -> all.firstOrNull { it.variant.id == v.id } }.map(::Drill)
-        if (drills.isNotEmpty()) start(TrainingSession("Playlist", graded = false, ArrayDeque(drills)))
+        if (drills.isNotEmpty()) start(TrainingSession("Playlist lernen", graded = false, ArrayDeque(drills), untilClean = true))
+    }
+
+    // ---- Playlists of one's own ----------------------------------------------------------
+
+    /** The name dialog for a playlist; null when closed. */
+    var naming by mutableStateOf<PlaylistNaming?>(null)
+        private set
+
+    private fun savedPlaylist(id: String): SavedPlaylist? = library.playlists.firstOrNull { it.id == id }
+
+    private fun updatePlaylist(id: String, transform: (SavedPlaylist) -> SavedPlaylist) =
+        updateLibrary { lib -> lib.copy(playlists = lib.playlists.map { if (it.id == id) transform(it) else it }) }
+
+    fun playSavedPlaylist(id: String) {
+        val p = savedPlaylist(id) ?: return
+        playVariants(p.name, library.variantsOf(p))
+    }
+
+    fun learnSavedPlaylist(id: String) {
+        val p = savedPlaylist(id) ?: return
+        learnVariants(library.variantsOf(p))
+    }
+
+    /** "+ Neue Playlist": pick the variants first, the name comes when saving. */
+    fun newPlaylist() {
+        startSelecting()
+    }
+
+    /** Asks for the name of a new playlist made of the ticked variants. */
+    fun saveSelectionAsPlaylist() {
+        if (selected.isNullOrEmpty()) return
+        naming = PlaylistNaming(null)
+    }
+
+    fun renamePlaylist(id: String) {
+        naming = PlaylistNaming(id, savedPlaylist(id)?.name ?: return)
+    }
+
+    fun cancelNaming() {
+        naming = null
+    }
+
+    /** Saves the name: a new playlist of the ticked variants, in the order of the home screen, or the new name of one. */
+    fun confirmNaming() {
+        val n = naming ?: return
+        val name = n.text.trim()
+        if (name.isEmpty()) return
+        naming = null
+        val id = n.playlistId
+        if (id != null) {
+            updatePlaylist(id) { it.copy(name = name) }
+            return
+        }
+        val ids = selectedVariants.map { it.id }
+        updateLibrary { it.copy(playlists = it.playlists + SavedPlaylist(newId(), name, ids)) }
+        endSelecting()
+        flash = "Playlist „$name“ mit ${ids.size} Variante(n) gespeichert."
+    }
+
+    /** The saved playlist whose variants are being picked on the home screen; null otherwise. */
+    var choosingFor by mutableStateOf<String?>(null)
+        private set
+
+    /** Ticks the variants of the playlist, to add or take away some with the tick boxes. */
+    fun changePlaylistVariants(id: String) {
+        val p = savedPlaylist(id) ?: return
+        selected = p.variantIds.toSet()
+        choosingFor = id
+    }
+
+    /** Takes the ticks over into the playlist: its order stays, new variants go to the end in the order of the home screen. */
+    fun applyPlaylistVariants() {
+        val id = choosingFor ?: return
+        val ticked = selected ?: return
+        val added = selectedVariants.map { it.id }
+        updatePlaylist(id) { p -> p.copy(variantIds = p.variantIds.filter { it in ticked } + added.filterNot { it in p.variantIds }) }
+        endSelecting()
+    }
+
+    /** Moves the variant at [index] of the playlist up (-1) or down (+1). */
+    fun movePlaylistVariant(id: String, index: Int, by: Int) = updatePlaylist(id) { p ->
+        val to = index + by
+        if (index !in p.variantIds.indices || to !in p.variantIds.indices) {
+            p
+        } else {
+            p.copy(variantIds = p.variantIds.toMutableList().apply { add(to, removeAt(index)) })
+        }
+    }
+
+    fun removeFromPlaylist(id: String, variantId: String) = updatePlaylist(id) { it.copy(variantIds = it.variantIds - variantId) }
+
+    /** Deletes the playlist only; its variants stay. */
+    fun deletePlaylist(id: String) {
+        updateLibrary { lib -> lib.copy(playlists = lib.playlists.filterNot { it.id == id }) }
+        if (choosingFor == id) endSelecting()
     }
 
     /** All variants of [opening] with their learning state, and its pin. */
@@ -638,7 +750,11 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         updateLibrary { lib ->
             val variants = lib.variants.filterNot { it.id in ids }
             val left = variants.map(Library::openingOf).toSet()
-            lib.copy(variants = variants, pinned = lib.pinned.filter { it in left })
+            lib.copy(
+                variants = variants,
+                pinned = lib.pinned.filter { it in left },
+                playlists = lib.playlists.map { it.copy(variantIds = it.variantIds - ids) },
+            )
         }
         saveProgress(progress.copy(cards = progress.cards - ids))
         selected = selected?.minus(ids)
@@ -661,6 +777,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun endSelecting() {
         selected = null
+        choosingFor = null
     }
 
     fun toggleSelected(id: String) {
@@ -681,7 +798,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun playSelected() = playVariants("Auswahl", selectedVariants)
 
-    fun practiceSelected() = practiceVariants(selectedVariants)
+    fun learnSelected() = learnVariants(selectedVariants)
 
     fun unsuspend(id: String) {
         val s = progress.cards[id] ?: return
@@ -840,7 +957,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 ),
             )
         }
-        if (g == Grade.AGAIN) s.queue.add(minOf(3, s.queue.size), attempt.drill)
+        when {
+            g != Grade.AGAIN -> s.solved++
+            // Learning a playlist: the same puzzle again, until it goes through without a mistake.
+            s.untilClean -> s.queue.addFirst(attempt.drill)
+            else -> s.queue.add(minOf(3, s.queue.size), attempt.drill)
+        }
         s.answered++
         nextQuiz(s)
     }

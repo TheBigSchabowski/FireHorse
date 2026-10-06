@@ -153,9 +153,9 @@ class PlaylistTest {
     }
 
     @Test
-    fun practisingThePlaylistAsksEveryVariantInOrderWithoutGrading() {
+    fun learningThePlaylistAsksEveryVariantInOrderWithoutGrading() {
         val vm = sample()
-        vm.practicePlaylist("Four Knights")
+        vm.learnPlaylist("Four Knights")
         val s = vm.session!!
         assertFalse(s.graded)
         val names = mutableListOf<String>()
@@ -175,7 +175,7 @@ class PlaylistTest {
         val vm = app()
         vm.add("", "Irgendwas", "d4 d5")
         assertEquals(listOf(Library.NO_OPENING), vm.openings())
-        vm.practicePlaylist(Library.NO_OPENING)
+        vm.learnPlaylist(Library.NO_OPENING)
         assertEquals("Irgendwas", vm.session!!.attempt!!.quiz.variant.name)
     }
 
@@ -235,8 +235,134 @@ class PlaylistTest {
         assertEquals("Auswahl", p.title)
         assertEquals(listOf("Najdorf", "Eins", "Drei"), p.ids.map { id -> vm.library.variants.first { it.id == id }.name })
         vm.cancelEditor()
-        vm.practiceSelected()
+        vm.learnSelected()
         assertEquals("Najdorf", vm.session!!.attempt!!.quiz.variant.name)
         assertEquals(2, vm.session!!.queue.size)
+    }
+
+    private fun AppViewModel.id(name: String) = library.variants.first { it.name == name }.id
+
+    /** Solves the current puzzle; with [wrongFirst] the first move is a wrong one, which the app corrects. */
+    private fun AppViewModel.solve(wrongFirst: Boolean = false) {
+        val v = session!!.attempt!!.quiz.variant
+        if (wrongFirst) submitMove(v.start.parseSan("a3")!!)
+        while (!session!!.attempt!!.finished) {
+            val attempt = session!!.attempt!!
+            submitMove(Move.fromUci(v.moves[attempt.played.size]))
+        }
+        grade()
+    }
+
+    @Test
+    fun learningAPlaylistGoesOnOnlyAfterACleanSolve() {
+        val vm = sample()
+        vm.learnPlaylist("Four Knights")
+        val s = vm.session!!
+        assertTrue(s.untilClean)
+        assertEquals(3, s.total)
+        assertEquals("Eins", s.attempt!!.quiz.variant.name)
+        vm.solve(wrongFirst = true)
+        // A mistake: the same puzzle again, right away.
+        assertEquals("Eins", s.attempt!!.quiz.variant.name)
+        assertEquals(0, s.solved)
+        vm.solve()
+        assertEquals("Zwei", s.attempt!!.quiz.variant.name)
+        assertEquals(1, s.solved)
+        vm.solve()
+        vm.solve(wrongFirst = true)
+        vm.solve()
+        assertNull(s.attempt)
+        assertEquals(3, s.solved)
+        assertTrue(vm.progress.cards.isEmpty())
+    }
+
+    @Test
+    fun aPlaylistOfOnesOwnMixesOpenings() {
+        val vm = sample()
+        vm.newPlaylist()
+        vm.toggleSelected(vm.id("Drei"))
+        vm.toggleSelected(vm.id("Najdorf"))
+        vm.saveSelectionAsPlaylist()
+        vm.naming!!.text = "  Gemischt  "
+        vm.confirmNaming()
+        assertNull(vm.naming)
+        assertNull(vm.selected)
+        val p = vm.library.playlists.single()
+        assertEquals("Gemischt", p.name)
+        // In the order of the home screen: Four Knights before Sizilianisch.
+        assertEquals(listOf("Drei", "Najdorf"), vm.library.variantsOf(p).map { it.name })
+        // Saved with the library.
+        assertEquals(listOf("Gemischt"), app().library.playlists.map { it.name })
+
+        vm.movePlaylistVariant(p.id, 1, -1)
+        assertEquals(listOf("Najdorf", "Drei"), vm.library.variantsOf(vm.library.playlists.single()).map { it.name })
+
+        vm.playSavedPlaylist(p.id)
+        assertEquals("Gemischt", vm.editor!!.playlist!!.title)
+        assertEquals("Najdorf", vm.editor!!.name)
+        vm.cancelEditor()
+        vm.learnSavedPlaylist(p.id)
+        assertEquals("Najdorf", vm.session!!.attempt!!.quiz.variant.name)
+        assertTrue(vm.session!!.untilClean)
+    }
+
+    @Test
+    fun aBlankNameSavesNothing() {
+        val vm = sample()
+        vm.newPlaylist()
+        vm.saveSelectionAsPlaylist()
+        // Nothing ticked yet: no dialog.
+        assertNull(vm.naming)
+        vm.toggleSelected(vm.id("Eins"))
+        vm.saveSelectionAsPlaylist()
+        vm.naming!!.text = "   "
+        vm.confirmNaming()
+        assertNotNull(vm.naming)
+        assertTrue(vm.library.playlists.isEmpty())
+        vm.cancelNaming()
+        assertNotNull(vm.selected)
+    }
+
+    @Test
+    fun changingThePlaylistsVariantsKeepsItsOrder() {
+        val vm = sample()
+        vm.newPlaylist()
+        listOf("Eins", "Zwei", "Drei").forEach { vm.toggleSelected(vm.id(it)) }
+        vm.saveSelectionAsPlaylist()
+        vm.naming!!.text = "FK"
+        vm.confirmNaming()
+        val id = vm.library.playlists.single().id
+        vm.movePlaylistVariant(id, 2, -2)
+
+        vm.changePlaylistVariants(id)
+        assertEquals(id, vm.choosingFor)
+        assertEquals(3, vm.selected!!.size)
+        vm.toggleSelected(vm.id("Zwei"))
+        vm.toggleSelected(vm.id("Najdorf"))
+        vm.applyPlaylistVariants()
+        assertNull(vm.selected)
+        assertNull(vm.choosingFor)
+        assertEquals(listOf("Drei", "Eins", "Najdorf"), vm.library.variantsOf(vm.library.playlists.single()).map { it.name })
+
+        vm.renamePlaylist(id)
+        assertEquals("FK", vm.naming!!.text)
+        vm.naming!!.text = "Four Knights + Najdorf"
+        vm.confirmNaming()
+        assertEquals("Four Knights + Najdorf", vm.library.playlists.single().name)
+    }
+
+    @Test
+    fun deletedVariantsLeaveThePlaylistsAndDeletingAPlaylistKeepsTheVariants() {
+        val vm = sample()
+        vm.newPlaylist()
+        listOf("Eins", "Najdorf").forEach { vm.toggleSelected(vm.id(it)) }
+        vm.saveSelectionAsPlaylist()
+        vm.naming!!.text = "P"
+        vm.confirmNaming()
+        vm.deleteOpening("Sizilianisch")
+        assertEquals(listOf(vm.id("Eins")), vm.library.playlists.single().variantIds)
+        vm.deletePlaylist(vm.library.playlists.single().id)
+        assertTrue(vm.library.playlists.isEmpty())
+        assertEquals(3, vm.library.variants.size)
     }
 }

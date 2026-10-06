@@ -30,6 +30,7 @@ fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false)
                     val editor = vm.editor
                     val prefs = vm.prefs
                     vm.paste?.let { PasteDialog(vm, it) }
+                    vm.naming?.let { PlaylistNameDialog(vm, it) }
                     when {
                         // Preferences and help go on top of everything, which is still there afterwards.
                         prefs != null -> PreferencesScreen(vm, prefs)

@@ -200,7 +200,7 @@ fun main() {
     }
     render("playlist-ueben") { vm ->
         vm.twoOpenings()
-        vm.practicePlaylist("Four Knights")
+        vm.learnPlaylist("Four Knights")
     }
     render("auswahl") { vm ->
         vm.twoOpenings()
@@ -208,6 +208,34 @@ fun main() {
         vm.startSelecting()
         vm.toggleSelectedOpening("Four Knights")
         vm.toggleSelected(vm.library.variants.first().id)
+    }
+    fun AppViewModel.ownPlaylist() {
+        twoOpenings()
+        newPlaylist()
+        toggleSelected(library.variants.first { it.name == "Scotch Game Nxe5" }.id)
+        toggleSelected(library.variants.first { it.name == "Scheveningen" }.id)
+        saveSelectionAsPlaylist()
+        naming!!.text = "Four Knights + Scheveningen"
+        confirmNaming()
+    }
+    render("meine-playlists") { it.ownPlaylist() }
+    render("playlist-name") { vm ->
+        vm.twoOpenings()
+        vm.newPlaylist()
+        vm.toggleSelected(vm.library.variants.first().id)
+        vm.saveSelectionAsPlaylist()
+        vm.naming!!.text = "Four Knights + Scheveningen"
+    }
+    render("playlist-varianten-aendern") { vm ->
+        vm.ownPlaylist()
+        vm.changePlaylistVariants(vm.library.playlists.single().id)
+    }
+    render("playlist-lernen-fehler") { vm ->
+        vm.twoOpenings()
+        vm.learnPlaylist("Four Knights")
+        val v = vm.session!!.attempt!!.quiz.variant
+        vm.submitMove(v.start.parseSan("a3")!!)
+        while (!vm.session!!.attempt!!.finished) vm.submitMove(Move.fromUci(v.moves[vm.session!!.attempt!!.played.size]))
     }
     render("hilfe-playlist") { vm ->
         vm.sample()

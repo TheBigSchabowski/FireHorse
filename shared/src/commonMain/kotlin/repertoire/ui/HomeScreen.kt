@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -36,10 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import repertoire.core.Library
 import repertoire.core.OpeningGroup
+import repertoire.core.QuizBuilder
+import repertoire.core.SavedPlaylist
 import repertoire.core.Variant
 import repertoire.core.compactMoves
 import repertoire.core.currentTimeMillis
@@ -78,13 +88,19 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Picking variants is about the openings; the playlists wait above until it is done.
+            if (vm.library.variants.isNotEmpty() && vm.selected == null) PlaylistSection(vm)
             val groups = vm.library.groups()
             val anyPinned = groups.any { it.pinned }
             groups.forEachIndexed { i, group ->
                 // With pins, the list falls into two parts: what matters now, and the rest.
-                if (anyPinned && (i == 0 || group.pinned != groups[i - 1].pinned)) {
+                if (i == 0 || group.pinned != groups[i - 1].pinned) {
                     Text(
-                        if (group.pinned) "ANGEPINNT" else "WEITERE ERÖFFNUNGEN",
+                        when {
+                            group.pinned -> "ANGEPINNT"
+                            anyPinned -> "WEITERE ERÖFFNUNGEN"
+                            else -> "ERÖFFNUNGEN"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -125,8 +141,22 @@ private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
     var confirmDelete by remember { mutableStateOf(false) }
     val n = selected.size
     if (n == 0) confirmDelete = false
+    val playlist = vm.choosingFor?.let { id -> vm.library.playlists.firstOrNull { it.id == id } }
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            if (playlist != null) {
+                // Changing which variants a playlist has: tick and untick, then take it over.
+                Text(
+                    "Playlist „${playlist.name}“: $n " + (if (n == 1) "Variante" else "Varianten"),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+                )
+                FlowRow {
+                    TextButton(onClick = vm::applyPlaylistVariants) { Text("Übernehmen") }
+                    TextButton(onClick = vm::endSelecting) { Text("Abbrechen") }
+                }
+                return@Column
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (n == 0) "Varianten antippen, um sie auszuwählen" else "$n ausgewählt",
@@ -136,8 +166,9 @@ private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
                 TextButton(onClick = vm::endSelecting) { Text("Fertig") }
             }
             FlowRow {
-                TextButton(onClick = vm::playSelected, enabled = n > 0) { Text("▶ Playlist") }
-                TextButton(onClick = vm::practiceSelected, enabled = n > 0) { Text("Playlist üben") }
+                TextButton(onClick = vm::saveSelectionAsPlaylist, enabled = n > 0) { Text("Als Playlist speichern") }
+                TextButton(onClick = vm::playSelected, enabled = n > 0) { Text("▶ Abspielen") }
+                TextButton(onClick = vm::learnSelected, enabled = n > 0) { Text("Lernen") }
                 if (confirmDelete) {
                     TextButton(onClick = { vm.deleteSelected(); confirmDelete = false }) {
                         Text("Wirklich $n löschen", color = DELETE_COLOR)
@@ -149,6 +180,106 @@ private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
             }
         }
     }
+}
+
+/** The playlists of one's own, above the openings, and the way to make a new one. */
+@Composable
+private fun PlaylistSection(vm: AppViewModel) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "MEINE PLAYLISTS",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = vm::newPlaylist) { Text("+ Neue Playlist") }
+    }
+    if (vm.library.playlists.isEmpty()) {
+        Text(
+            "Stell dir Varianten aus beliebigen Eröffnungen zusammen: „+ Neue Playlist“, Varianten antippen, speichern.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    for (p in vm.library.playlists) {
+        Spacer(Modifier.height(8.dp))
+        PlaylistCard(vm, p)
+    }
+    Spacer(Modifier.height(20.dp))
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlaylistCard(vm: AppViewModel, p: SavedPlaylist) {
+    var confirmDelete by remember(p.id) { mutableStateOf(false) }
+    var showOrder by remember(p.id) { mutableStateOf(false) }
+    val variants = vm.library.variantsOf(p)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(p.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "${variants.size} " + (if (variants.size == 1) "Variante" else "Varianten") +
+                    variants.map(Library::openingOf).distinct().joinToString(", ").let { if (it.isEmpty()) "" else "  ·  $it" },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (showOrder) {
+                Spacer(Modifier.height(6.dp))
+                variants.forEachIndexed { i, v ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${i + 1}.  " + QuizBuilder.title(v),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { vm.movePlaylistVariant(p.id, i, -1) }, enabled = i > 0) { Text("↑") }
+                        TextButton(onClick = { vm.movePlaylistVariant(p.id, i, 1) }, enabled = i < variants.lastIndex) { Text("↓") }
+                        TextButton(onClick = { vm.removeFromPlaylist(p.id, v.id) }) { Text("✕") }
+                    }
+                }
+            }
+            FlowRow {
+                TextButton(onClick = { vm.playSavedPlaylist(p.id) }, enabled = variants.isNotEmpty()) { Text("▶ Abspielen") }
+                TextButton(onClick = { vm.learnSavedPlaylist(p.id) }, enabled = variants.isNotEmpty()) { Text("Lernen") }
+                TextButton(onClick = { showOrder = !showOrder }) { Text(if (showOrder) "Reihenfolge schließen" else "Reihenfolge") }
+                TextButton(onClick = { vm.changePlaylistVariants(p.id) }) { Text("Varianten ändern") }
+                TextButton(onClick = { vm.renamePlaylist(p.id) }) { Text("Umbenennen") }
+                if (confirmDelete) {
+                    TextButton(onClick = { vm.deletePlaylist(p.id) }) { Text("Playlist wirklich löschen", color = DELETE_COLOR) }
+                    TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
+                } else {
+                    TextButton(onClick = { confirmDelete = true }) { Text("Löschen") }
+                }
+            }
+        }
+    }
+}
+
+/** Name for a new playlist, or a new name for one. */
+@Composable
+internal fun PlaylistNameDialog(vm: AppViewModel, n: PlaylistNaming) {
+    val focus = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = vm::cancelNaming,
+        title = { Text(if (n.playlistId == null) "Neue Playlist" else "Playlist umbenennen") },
+        text = {
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            OutlinedTextField(
+                n.text,
+                { n.text = it },
+                label = { Text("Name") },
+                placeholder = { Text("z. B. Four Knights + Najdorf") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { vm.confirmNaming() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+                    if (it.type == KeyEventType.KeyDown && it.key == Key.Enter) vm.confirmNaming().let { true } else false
+                },
+            )
+        },
+        confirmButton = { Button(onClick = vm::confirmNaming, enabled = n.text.isNotBlank()) { Text("Speichern") } },
+        dismissButton = { TextButton(onClick = vm::cancelNaming) { Text("Abbrechen") } },
+    )
 }
 
 /** Name of the opening and what goes for all its variants: the playlist, pinning, export. */
@@ -171,7 +302,7 @@ private fun OpeningHeader(vm: AppViewModel, group: OpeningGroup) {
     }
     FlowRow {
         TextButton(onClick = { vm.playPlaylist(group.opening) }) { Text("▶ Playlist") }
-        TextButton(onClick = { vm.practicePlaylist(group.opening) }) { Text("Playlist üben") }
+        TextButton(onClick = { vm.learnPlaylist(group.opening) }) { Text("Playlist lernen") }
         TextButton(onClick = { vm.togglePin(group.opening) }) { Text(if (group.pinned) "Lösen" else "Anpinnen") }
         TextButton(onClick = { vm.startSelecting() }) { Text("Auswählen") }
         if (vm.canTransfer) TextButton(onClick = { vm.export(group.opening) }) { Text("Exportieren") }
