@@ -82,6 +82,14 @@ installieren“ erlauben.
   zeigt den Modus an; jetzt kreist Antippen ein Feld ein (nochmal tippen nimmt es weg), Ziehen von
   Feld zu Feld malt einen Pfeil, und Züge sind gesperrt. „Löschen“ in der Leiste oben wischt alles
   weg, „Fertig“ oder nochmal dreimal tippen beendet den Modus. Gezeichnetes wird nicht gespeichert.
+  Unten auf dem Brett liegt dabei eine Leiste mit vier Farben (grün, rot, blau, gelb) und der Wahl
+  zwischen Kreis und ausgefülltem Feld. Am Computer malt Shift rot, Alt blau, beide gelb.
+- **Zeichnungen zum Abfragen:** im Editor legt „+ Zeichnung hier“ (oder `Strg+B n`) an der Stellung auf dem Brett eine
+  Zeichnung an, die mit der Variante gespeichert wird (blauer Rahmen: Antippen kreist ein, Ziehen malt
+  einen Pfeil), dazu optional eine Frage oder ein Name. Beim Durchgehen und Abspielen ist sie blau zu
+  sehen. Nach dem Puzzle und den Theorie-Lücken kommt jede Zeichnung dran: das Brett zeigt ihre
+  Stellung, du zeichnest aus dem Gedächtnis, „Prüfen“ vergleicht (grün richtig, orange fehlte, rot zu
+  viel). Die Farbe zählt mit. Fehler zählen wie ein falscher Zug. Ändern sich die Züge davor, fällt die Zeichnung weg.
 - Während eines Puzzles: **Zielstellung zeigen** als Hilfe, **↺ Nochmal von vorn**. Ein Zug aus
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.
@@ -110,7 +118,9 @@ oder ganz ausschalten.
 | Computer | Handy | |
 |---|---|---|
 | `Strg+B ?` | antippen | Liste aller Kürzel (Einträge sind anklickbar) |
-| `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus |
+| `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
+| `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
+| `Strg+B u` | Kürzel-Liste antippen | Gezeichnetes auf dem Brett sofort wegwischen |
 | `Strg+B c` | 2 Schritte halten | Neue Variante |
 | `Strg+B p` | 3 Schritte halten | PGN einfügen |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |

@@ -21,6 +21,8 @@ data class Variant(
      * that position instead and is trained by playing on from there.
      */
     val startFen: String = Position.START_FEN,
+    /** Arrows and circles kept at positions of the line, asked after the puzzle like the theory. */
+    val drawings: List<Drawing> = emptyList(),
 ) {
     /** True if the line does not begin at the start of a game. */
     val setUp: Boolean get() = startFen != Position.START_FEN

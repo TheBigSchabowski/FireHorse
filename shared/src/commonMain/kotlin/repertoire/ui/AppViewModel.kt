@@ -7,12 +7,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import repertoire.core.Cloze
+import repertoire.core.Drawing
+import repertoire.core.DrawingCheck
 import repertoire.core.Exchange
 import repertoire.core.FilePicker
 import repertoire.core.Fsrs
 import repertoire.core.Grade
 import repertoire.core.TheoryPart
 import repertoire.core.Library
+import repertoire.core.Mark
 import repertoire.core.Move
 import repertoire.core.MoveRefs
 import repertoire.core.Outcome
@@ -31,6 +34,7 @@ import repertoire.core.Store
 import repertoire.core.Variant
 import repertoire.core.newId
 import repertoire.core.numberedSan
+import repertoire.core.toggle
 
 enum class FeedbackTone { GOOD, BAD, INFO }
 
@@ -86,8 +90,29 @@ class TrainingSession(
     val gaps: List<TheoryPart.Gap>
         get() = attempt?.takeIf { !it.singleMove }?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
 
-    /** The position is reached and every gap is checked: ready to be graded. */
-    val done: Boolean get() = attempt?.finished == true && (gapResults != null || gaps.isEmpty())
+    val gapsChecked: Boolean get() = gapResults != null || gaps.isEmpty()
+
+    /** The variant's saved drawings, drawn from memory after the gaps; single moves do not ask them either. */
+    val drawings: List<Drawing>
+        get() = attempt?.takeIf { !it.singleMove }?.quiz?.variant?.drawings ?: emptyList()
+
+    /** Which of [drawings] is asked; they come one after the other. */
+    var drawingIndex by mutableIntStateOf(0)
+
+    /** What has been drawn for it so far. */
+    var drawingInput by mutableStateOf<List<Mark>>(emptyList())
+
+    /** The drawings checked so far, in order. */
+    var drawingResults by mutableStateOf<List<DrawingCheck>>(emptyList())
+
+    /** The drawing being asked: once the position is reached and the gaps are checked; null before and without drawings. */
+    val drawing: Drawing? get() = if (attempt?.finished == true && gapsChecked) drawings.getOrNull(drawingIndex) else null
+
+    /** How [drawing] went, once checked. */
+    val drawingCheck: DrawingCheck? get() = drawingResults.getOrNull(drawingIndex)
+
+    /** The position is reached, every gap and every drawing is checked: ready to be graded. */
+    val done: Boolean get() = attempt?.finished == true && gapsChecked && drawingResults.size == drawings.size
 }
 
 /** Variants played one after the other in the editor: an opening's, or the selected ones; [index] is the one that is open. */
@@ -110,10 +135,28 @@ class EditorState(
     val note: String? = null,
     /** Set while a playlist runs: at the end of the line the player goes on with the next variant. */
     val playlist: Playlist? = null,
+    drawings: List<Drawing> = emptyList(),
 ) {
     var opening by mutableStateOf(opening)
     var name by mutableStateOf(name)
-    var moves by mutableStateOf(moves)
+
+    /** Arrows and circles saved with the variant; shown at their position, asked after the puzzle. */
+    var drawings by mutableStateOf(drawings)
+
+    /** The saved drawing that the board draws into, by index in [drawings]; null while the board plays moves. */
+    var drawingAt by mutableStateOf<Int?>(null)
+
+    private var movesState by mutableStateOf(moves)
+
+    var moves: List<Move>
+        get() = movesState
+        set(value) {
+            // A drawing belongs to its position: where the line changes, the drawings after it go with it.
+            val same = movesState.zip(value).takeWhile { (a, b) -> a == b }.size
+            finishDrawing()
+            drawings = drawings.filter { it.ply <= same }
+            movesState = value
+        }
     var playWhite by mutableStateOf(playWhite)
     var theory by mutableStateOf(TextFieldValue(theory))
 
@@ -158,8 +201,29 @@ class EditorState(
 
     /** The variant as it would be saved, for checks that work on a [Variant]. */
     fun asVariant(): Variant =
-        Variant(editingId ?: "", opening, name, moves.map { it.uci }, playWhite, theory.text, startFen)
+        Variant(editingId ?: "", opening, name, moves.map { it.uci }, playWhite, theory.text, startFen, keptDrawings)
+
+    /** Drawings with something in them; an empty one is not saved. */
+    val keptDrawings: List<Drawing> get() = drawings.filter { it.marks.isNotEmpty() }
+
+    val editedDrawing: Drawing? get() = drawingAt?.let(drawings::getOrNull)
+
+    /** The saved drawings at the position on the board. */
+    val drawingsHere: List<Drawing> get() = drawings.filter { it.ply == cursor }
+
+    /** The board plays moves again; a drawing left empty is dropped. */
+    fun finishDrawing() {
+        drawingAt = null
+        drawings = keptDrawings
+    }
+
+    /** "Ausgangsstellung" or "nach 8. Ng4": where a drawing at [ply] is. */
+    fun plyLabel(ply: Int): String = asVariant().plyLabel(ply)
 }
+
+/** "Ausgangsstellung" or "nach 8. Ng4": the position after the first [ply] moves. */
+fun Variant.plyLabel(ply: Int): String =
+    if (ply == 0) "Ausgangsstellung" else "nach " + numberedSan(positions[ply - 1], Move.fromUci(moves[ply - 1]))
 
 /** The dialog that asks for a playlist's name: a new one from the selection ([playlistId] null), or a new name. */
 class PlaylistNaming(val playlistId: String?, name: String = "") {
@@ -208,6 +272,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     val drawMode: Boolean get() = drawModeOnScreen?.value == true
 
+    /** Color and shape to draw with, the same on every board until changed. */
+    val pen = mutableStateOf(Pen())
+
+    /** Bumped by Ctrl+B u: the board wipes its scribbles. */
+    var boardClears by mutableIntStateOf(0)
+        private set
+
     /** An editor with something in it, which a new variant would throw away. */
     private val editorInUse: Boolean
         get() = editor?.let { it.moves.isNotEmpty() || it.name.isNotBlank() || it.theory.text.isNotBlank() } == true
@@ -227,6 +298,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.SETTINGS -> prefs = if (prefs == null) Prefs.Config else null
             Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
                 ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
+            Command.DRAW_KEPT -> editor?.let { toggleKeptDrawing(it) }
+                ?: run { flash = "Zeichnungen zum Abfragen entstehen im Editor (Durchgehen oder Bearbeiten)." }
+            Command.CLEAR -> if (drawModeOnScreen != null) clearBoard() else flash = "Wegwischen geht, sobald ein Brett zu sehen ist."
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
@@ -401,7 +475,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false, playlist: Playlist? = null) {
         editor = EditorState(
             v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart || play, v.startFen,
-            playlist = playlist,
+            playlist = playlist, drawings = v.drawings,
         )
         if (play) editor?.playing = v.moves.isNotEmpty()
     }
@@ -410,6 +484,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     fun editorTogglePlay() {
         val e = editor ?: return
         val p = e.playlist
+        e.finishDrawing()
         when {
             e.playing -> e.playing = false
             e.moves.isEmpty() -> Unit
@@ -460,6 +535,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     fun editorGoTo(index: Int) {
         val e = editor ?: return
         e.playing = false
+        e.finishDrawing()
         e.cursor = index.coerceIn(0, e.moves.size)
     }
 
@@ -486,6 +562,73 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val e = editor ?: return
         e.moves = emptyList()
         e.cursor = 0
+    }
+
+    // ---- Saved drawings ------------------------------------------------------------------
+
+    /**
+     * Ctrl+B u: wipes what is drawn on the board right now, like „Löschen“ in its bar: the scribbles,
+     * and the drawing being drawn into (a saved one in the editor, one from memory in a quiz). Saved
+     * drawings that are only shown stay.
+     */
+    private fun clearBoard() {
+        boardClears++
+        if (editor?.editedDrawing != null) editorClearDrawing() else clearDrawingInput()
+    }
+
+    /** Ctrl+B n: draws into the drawing of this position (a new one if there is none), or finishes it. */
+    private fun toggleKeptDrawing(e: EditorState) {
+        when {
+            e.drawingAt != null -> editorFinishDrawing()
+            e.drawingsHere.isNotEmpty() -> editorEditDrawing(e.drawings.indexOf(e.drawingsHere.first()))
+            else -> editorNewDrawing()
+        }
+    }
+
+    /** A new drawing at the position on the board; the board draws into it until [editorFinishDrawing]. */
+    fun editorNewDrawing() {
+        val e = editor ?: return
+        e.playing = false
+        e.finishDrawing()
+        e.drawMode.value = false
+        e.drawings = e.drawings + Drawing(e.cursor, emptyList())
+        e.drawingAt = e.drawings.lastIndex
+    }
+
+    /** Goes to the position of drawing [index] and draws into it. */
+    fun editorEditDrawing(index: Int) {
+        val e = editor ?: return
+        val d = e.drawings.getOrNull(index) ?: return
+        // Finishing the one being drawn may drop it, which shifts the others.
+        e.finishDrawing()
+        e.playing = false
+        e.drawMode.value = false
+        e.cursor = d.ply
+        e.drawingAt = e.drawings.indexOf(d).takeIf { it >= 0 } ?: return
+    }
+
+    private fun updateDrawing(transform: (Drawing) -> Drawing) {
+        val e = editor ?: return
+        val i = e.drawingAt ?: return
+        e.drawings = e.drawings.mapIndexed { j, d -> if (j == i) transform(d) else d }
+    }
+
+    /** A circle or arrow drawn on the board goes into the drawing; the same one again takes it away. */
+    fun editorDrawingMark(mark: Mark) = updateDrawing { it.copy(marks = it.marks.toggle(mark)) }
+
+    fun editorClearDrawing() = updateDrawing { it.copy(marks = emptyList()) }
+
+    fun editorDrawingQuestion(text: String) = updateDrawing { it.copy(question = text) }
+
+    fun editorFinishDrawing() {
+        editor?.finishDrawing()
+    }
+
+    fun editorDeleteDrawing() {
+        val e = editor ?: return
+        val i = e.drawingAt ?: return
+        e.drawingAt = null
+        e.drawings = e.drawings.filterIndexed { j, _ -> j != i }
     }
 
     /** Opens the theory field and puts the cursor into it, or closes it again. */
@@ -562,6 +705,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val id = e.editingId ?: newId()
         val variant = Variant(
             id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite, e.theory.text.trim(), e.startFen,
+            e.keptDrawings.map { it.copy(question = it.question.trim()) },
         )
         val old = library.variants.firstOrNull { it.id == id }
         updateLibrary { lib ->
@@ -838,14 +982,22 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     private fun nextQuiz(s: TrainingSession) {
         s.attempt = s.queue.removeFirstOrNull()?.attempt()
-        s.preview = null
         s.feedback = null
         s.marks = emptyMap()
         s.showTarget = false
         s.earlierMistakes = 0
+        clearAnswers(s)
+        s.revision++
+    }
+
+    /** Nothing typed into the gaps, nothing drawn from memory. */
+    private fun clearAnswers(s: TrainingSession) {
+        s.preview = null
         s.gapInputs = List(s.gaps.size) { "" }
         s.gapResults = null
-        s.revision++
+        s.drawingIndex = 0
+        s.drawingInput = emptyList()
+        s.drawingResults = emptyList()
     }
 
     /** Start the current puzzle again from the initial position. */
@@ -854,9 +1006,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val attempt = s.attempt ?: return
         s.earlierMistakes += attempt.mistakes
         s.attempt = attempt.drill.attempt()
-        s.preview = null
-        s.gapInputs = List(s.gaps.size) { "" }
-        s.gapResults = null
+        clearAnswers(s)
         s.feedback = null
         s.marks = emptyMap()
         s.revision++
@@ -875,6 +1025,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                     attempt.singleMove -> Feedback("Richtig!", FeedbackTone.GOOD)
                     attempt.mistakes > 0 -> Feedback("Stellung erreicht, aber mit ${attempt.mistakes} Fehler(n).", FeedbackTone.BAD)
                     else -> Feedback("Richtig! Das ist die Stellung.", FeedbackTone.GOOD)
+                }
+                // Without gaps the board goes straight on to the first drawing, at its own position.
+                s.drawing?.let { d ->
+                    s.feedback = s.feedback?.let { it.copy(text = it.text + " Jetzt die Zeichnung " + attempt.quiz.variant.plyLabel(d.ply) + ".") }
                 }
             }
             is Outcome.OtherVariant -> s.feedback = Feedback(
@@ -918,22 +1072,76 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val results = s.gaps.map { Cloze.isCorrect(s.gapInputs[it.index], it) }
         s.gapResults = results
         val right = results.count { it }
+        val clean = (s.attempt?.mistakes ?: 0) + s.earlierMistakes == 0
+        val then = when (s.drawings.size) {
+            0 -> ""
+            1 -> " Jetzt die Zeichnung."
+            else -> " Jetzt die ${s.drawings.size} Zeichnungen."
+        }
         s.feedback = when {
-            right == results.size && (s.attempt?.mistakes ?: 0) + s.earlierMistakes == 0 -> Feedback("Alles richtig!", FeedbackTone.GOOD)
-            right == results.size -> Feedback("Alle Lücken richtig.", FeedbackTone.INFO)
-            else -> Feedback("$right von ${results.size} Lücken richtig.", FeedbackTone.BAD)
+            right == results.size && clean && s.drawings.isEmpty() -> Feedback("Alles richtig!", FeedbackTone.GOOD)
+            right == results.size -> Feedback("Alle Lücken richtig.$then", if (clean) FeedbackTone.GOOD else FeedbackTone.INFO)
+            else -> Feedback("$right von ${results.size} Lücken richtig.$then", FeedbackTone.BAD)
         }
     }
 
-    /** Enter: check the gaps first, then grade. */
-    fun confirm() {
+    /** A circle or arrow drawn from memory; the same one again takes it away. */
+    fun drawingMark(mark: Mark) {
         val s = session ?: return
-        if (s.done) grade() else checkGaps()
+        if (s.drawing != null && s.drawingCheck == null) s.drawingInput = s.drawingInput.toggle(mark)
     }
 
-    /** Mistakes on the board (all tries) plus wrong gaps. */
+    fun clearDrawingInput() {
+        val s = session ?: return
+        if (s.drawingCheck == null) s.drawingInput = emptyList()
+    }
+
+    /** Compares what was drawn with the saved drawing; the board then shows right, missing and too much. */
+    fun checkDrawing() {
+        val s = session ?: return
+        val d = s.drawing ?: return
+        if (s.drawingCheck != null) return
+        val check = DrawingCheck.of(d, s.drawingInput)
+        s.drawingResults = s.drawingResults + check
+        s.preview = null
+        s.feedback = when {
+            check.correct && s.done && mistakes(s) == 0 -> Feedback("Alles richtig!", FeedbackTone.GOOD)
+            check.correct -> Feedback("Zeichnung richtig.", FeedbackTone.GOOD)
+            else -> Feedback(
+                listOfNotNull(
+                    check.missing.takeIf { it.isNotEmpty() }?.let { "Es fehlt: " + it.joinToString(", ") { m -> m.describe() } + "." },
+                    check.extra.takeIf { it.isNotEmpty() }?.let { "Zu viel: " + it.joinToString(", ") { m -> m.describe() } + "." },
+                ).joinToString(" "),
+                FeedbackTone.BAD,
+            )
+        }
+    }
+
+    /** On to the next drawing, once this one is checked. */
+    fun nextDrawing() {
+        val s = session ?: return
+        if (s.drawingCheck == null || s.drawingIndex >= s.drawings.lastIndex) return
+        s.drawingIndex++
+        s.drawingInput = emptyList()
+        s.preview = null
+        s.feedback = null
+    }
+
+    /** Enter: check the gaps first, then each drawing, then grade. */
+    fun confirm() {
+        val s = session ?: return
+        when {
+            s.done -> grade()
+            !s.gapsChecked -> checkGaps()
+            s.drawingCheck == null -> checkDrawing()
+            else -> nextDrawing()
+        }
+    }
+
+    /** Mistakes on the board (all tries) plus wrong gaps and drawings. */
     fun mistakes(s: TrainingSession): Int =
-        (s.attempt?.mistakes ?: 0) + s.earlierMistakes + (s.gapResults?.count { !it } ?: 0)
+        (s.attempt?.mistakes ?: 0) + s.earlierMistakes + (s.gapResults?.count { !it } ?: 0) +
+            s.drawingResults.count { !it.correct }
 
     /** Finishes the current puzzle. Without an explicit grade, a clean solve counts as GOOD, a mistake as AGAIN. */
     fun grade(grade: Grade? = null) {
@@ -1040,6 +1248,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         if (!e.setUp) return
         e.startFen = Position.START_FEN
         e.moves = emptyList()
+        e.drawings = emptyList()
         e.cursor = 0
     }
 

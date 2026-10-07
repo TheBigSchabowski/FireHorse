@@ -64,7 +64,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     PASTE("PGN und FEN einfügen", "Zugfolgen und Stellungen von woanders übernehmen"),
     LEARNING("Lernen und Üben", "Lernen, Frei üben, Züge üben, neue Varianten pro Tag"),
     THEORY("Theorie und Lücken", "Notizen zur Variante, die beim Üben abgefragt werden"),
-    BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus"),
+    BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus, Zeichnungen zum Abfragen"),
     PLAYER("Abspielen", "Eine Variante von allein durchlaufen lassen, Tempo, Wiederholen"),
     PLAYLIST("Playlists, Anpinnen, Auswählen", "Varianten nacheinander abspielen oder lernen, eigene Playlists, mehrere auf einmal löschen"),
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
@@ -458,7 +458,33 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                     "Antippen kreist ein Feld ein, Ziehen malt einen Pfeil, und Züge sind gesperrt. „Löschen“ wischt alles weg, " +
                     "„Fertig“ oder nochmal dreimal tippen beendet ihn.",
             )
-            Para("Gezeichnetes wird nicht gespeichert. Das gilt im Editor wie beim Üben.")
+            Bullet(
+                "Farben und Felder",
+                "im Zeichenmodus liegt unten auf dem Brett eine Leiste: vier Farben (grün, rot, blau, gelb), dazu Kreis oder ausgefülltes Feld " +
+                    "für das, was ein Tipp auf ein Feld malt. Die Wahl gilt für alles Zeichnen, bis du sie änderst. " +
+                    "Dasselbe in einer anderen Farbe färbt um." +
+                    (if (touch) "" else " Am Computer malt Shift rot, Alt blau, beide gelb."),
+            )
+            Para("So Gezeichnetes ist nur für dich, für den Moment: es wird nicht gespeichert und nie abgefragt. Das gilt im Editor wie beim Üben.")
+            Bullet(
+                "Wegwischen",
+                (if (touch) "das Kürzel „Wegwischen“" else settings.shortcutLabel(Command.CLEAR)) +
+                    " nimmt sofort alles Gezeichnete vom Brett, wie „Löschen“ in der Leiste. Gespeicherte Zeichnungen, die nur angezeigt werden, bleiben.",
+            )
+            SubHeading("Zeichnungen zum Abfragen")
+            Para(
+                "Im Editor (Durchgehen oder Bearbeiten) legt „+ Zeichnung hier“" + (if (touch) "" else " oder ${settings.shortcutLabel(Command.DRAW_KEPT)}") +
+                    " eine Zeichnung an, die mit der Variante gespeichert wird. " +
+                    "Der Rahmen wird blau: Antippen kreist ein Feld ein, Ziehen malt einen Pfeil, dasselbe nochmal nimmt es weg. " +
+                    "Dazu kannst du eine Frage oder einen Namen eintragen („Wo sind die schwachen Felder?“).",
+            )
+            Para("Beim Durchgehen und Abspielen siehst du sie blau an ihrer Stellung. Ein Tipp auf eine Zeichnung in der Liste springt dorthin und bearbeitet sie.")
+            Para(
+                "Nach dem Puzzle (und nach den Theorie-Lücken) wird jede Zeichnung abgefragt: das Brett zeigt ihre Stellung, du zeichnest aus dem Gedächtnis, " +
+                    "„Prüfen“ vergleicht. Grün war richtig, orange fehlte, rot war zu viel; jeder Fehler zählt wie ein falscher Zug. " +
+                    "Die Farbe zählt mit, und ein Pfeil nur in seiner Richtung. „Züge üben“ fragt keine Zeichnungen ab.",
+            )
+            Para("Ändern sich die Züge vor einer Zeichnung, passt sie nicht mehr zur Stellung und fällt weg.")
         }
         HelpTopic.PLAYER -> {
             Para("Wer sich eine Stellung oder Zugfolge nicht mehr merkt, lässt die Variante einfach ablaufen, statt jeden Zug anzuklicken.")

@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
  *
  * "id" and "progress" are optional; without an id a variant is always added as new. "startFen" only
  * appears for a variant that does not begin at the start of a game, and "moves" then counts from there.
+ * "drawings" are the saved arrows and circles, e.g. `{"ply": 12, "marks": ["d5", "f3f5"], "question": "Plan?"}`.
  */
 @Serializable
 data class ExportFile(
@@ -48,6 +49,8 @@ data class ExportedVariant(
     val theory: String = "",
     /** Left out for a variant that starts at the beginning of a game, which is the normal case. */
     val startFen: String? = null,
+    /** Arrows ("e2e4") and circles ("d5") after `ply` moves, each with its question. */
+    val drawings: List<Drawing> = emptyList(),
     /** Learning state; left out, the variant starts as new. */
     val progress: ReviewState? = null,
 )
@@ -80,6 +83,7 @@ object Exchange {
                         moves = compactMoves(v.numberedSan()),
                         theory = v.theory,
                         startFen = v.startFen.takeIf { v.setUp },
+                        drawings = v.drawings,
                         progress = if (withProgress) progress.cards[v.id] else null,
                     )
                 },
@@ -124,7 +128,9 @@ object Exchange {
                 continue
             }
             val id = e.id?.takeIf(String::isNotBlank) ?: newId()
-            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory, start.fen)
+            // A drawing after a move the line does not have would show up nowhere.
+            val drawings = e.drawings.filter { it.ply in 0..moves.size && it.marks.isNotEmpty() }
+            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory, start.fen, drawings)
             val old = variants.firstOrNull { it.id == id }
             if (old != null) {
                 variants = variants.map { if (it.id == id) variant else it }

@@ -100,17 +100,34 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
 
         val variant = attempt.quiz.variant
         val preview = session.preview
+        // A drawing asked from memory puts the board at its position; a "@8. Ng4" link still goes first.
+        val drawing = session.drawing
+        val check = session.drawingCheck
+        val shownPly = preview ?: drawing?.ply
         BoardWithPanel(
             board = { modifier ->
                 ChessBoard(
-                    position = preview?.let { variant.positions[it] } ?: attempt.position,
+                    position = shownPly?.let { variant.positions[it] } ?: attempt.position,
                     whiteBottom = variant.playWhite,
-                    lastMove = if (preview != null) Move.fromUci(variant.moves[preview - 1]) else attempt.lastMove,
-                    marks = if (preview != null) emptyMap() else session.marks,
+                    lastMove = if (shownPly != null) variant.moves.getOrNull(shownPly - 1)?.let(Move::fromUci) else attempt.lastMove,
+                    marks = if (shownPly != null) emptyMap() else session.marks,
                     interactive = !attempt.finished && preview == null,
                     onMove = vm::submitMove,
                     modifier = modifier,
                     drawModeState = session.drawMode,
+                    kept = when {
+                        preview != null || drawing == null -> emptyList()
+                        check == null -> session.drawingInput.map(::KeptMark)
+                        else -> check.right.map { KeptMark(it, KEPT_RIGHT) } + check.missing.map { KeptMark(it, KEPT_MISSING) } +
+                            check.extra.map { KeptMark(it, KEPT_EXTRA) }
+                    },
+                    penState = vm.pen,
+                    clears = vm.boardClears,
+                    keeping = if (preview == null && drawing != null && check == null) {
+                        Keeping("✎ Aus dem Gedächtnis", vm::drawingMark, vm::clearDrawingInput)
+                    } else {
+                        null
+                    },
                 )
             },
             top = { Chalkboard(variant.opening, variant.name) },
@@ -158,6 +175,10 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                     Spacer(Modifier.height(12.dp))
                     TheoryQuiz(vm, session, variant)
                 }
+                if (drawing != null) {
+                    Spacer(Modifier.height(12.dp))
+                    DrawingQuiz(session, variant)
+                }
                 if (preview != null) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -171,7 +192,7 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                 }
                 Spacer(Modifier.height(16.dp))
                 if (!session.done) {
-                    Button(onClick = vm::checkGaps) { Text("Prüfen ⏎") }
+                    Button(onClick = vm::confirm) { Text(if (check != null) "Nächste Zeichnung ⏎" else "Prüfen ⏎") }
                 } else if (session.graded && vm.mistakes(session) == 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { vm.grade(Grade.HARD) }) { Text("Schwer") }
@@ -215,6 +236,45 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = vm::suspendCurrent) { Text("Variante nicht mehr abfragen") }
+        }
+    }
+}
+
+/** The question of the drawing being asked, and once checked, what the colors on the board mean. */
+@Composable
+private fun DrawingQuiz(session: TrainingSession, variant: Variant) {
+    val drawing = session.drawing ?: return
+    val check = session.drawingCheck
+    Column(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            (if (session.drawings.size > 1) "Zeichnung ${session.drawingIndex + 1} von ${session.drawings.size} · " else "Zeichnung · ") +
+                "Stellung ${variant.plyLabel(drawing.ply)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            drawing.question.ifBlank { "Zeichne, was du hier markiert hast." },
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(4.dp))
+        if (check == null) {
+            Text(
+                "Auf dem Brett: Antippen kreist ein Feld ein, Ziehen malt einen Pfeil. ${drawing.marks.size} Markierung(en) gesucht.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (!check.correct) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("richtig", style = MaterialTheme.typography.bodySmall, color = GOOD_COLOR, fontWeight = FontWeight.SemiBold)
+                Text("fehlte", style = MaterialTheme.typography.bodySmall, color = KEPT_MISSING.copy(alpha = 1f), fontWeight = FontWeight.SemiBold)
+                Text("zu viel", style = MaterialTheme.typography.bodySmall, color = BAD_COLOR, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

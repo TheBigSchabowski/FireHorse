@@ -96,6 +96,8 @@ fun formatSeconds(ms: Long): String {
 enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     SHORTCUTS('?', "Alle Kürzel anzeigen", 0),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
+    DRAW_KEPT('n', "Zeichnung zum Abfragen an/aus (im Editor)", null),
+    CLEAR('u', "Gezeichnetes auf dem Brett wegwischen", null),
     NEW_VARIANT('c', "Neue Variante", 2),
     PASTE_PGN('p', "PGN einfügen", 3),
     PASTE_FEN('f', "FEN einfügen", 4),
@@ -124,6 +126,7 @@ internal val OTHER_KEYS = listOf(
     "Enter" to "Lücken prüfen, dann „Gut“ / „Weiter“",
     "Leertaste" to "„Gut“ / „Weiter“, wenn alles geprüft ist",
     "Rechtsklick" to "Ziehen malt einen Pfeil aufs Brett, auf einem Feld einen Kreis",
+    "+ Shift / Alt / beide" to "beim Zeichnen: rot / blau / gelb",
 )
 
 /** The same on a phone, without a keyboard. */
@@ -289,6 +292,8 @@ fun BoxScope.ShortcutOverlay(vm: AppViewModel) {
 internal val Command.short: String get() = when (this) {
     Command.SHORTCUTS -> "Liste"
     Command.DRAW -> "Zeichnen"
+    Command.DRAW_KEPT -> "Zeichnung"
+    Command.CLEAR -> "Wegwischen"
     Command.NEW_VARIANT -> "Variante"
     Command.PASTE_PGN -> "PGN"
     Command.PASTE_FEN -> "FEN"

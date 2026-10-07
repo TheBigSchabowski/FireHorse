@@ -70,6 +70,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             }
         }
         Spacer(Modifier.height(12.dp))
+        val edited = e.editedDrawing
         BoardWithPanel(
             board = { modifier ->
                 ChessBoard(
@@ -81,6 +82,13 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                     onMove = vm::editorPlay,
                     modifier = modifier,
                     drawModeState = e.drawMode,
+                    // While one drawing is drawn, only it is on the board; otherwise all of this position.
+                    kept = (edited?.marks ?: e.drawingsHere.flatMap { it.marks }).map(::KeptMark),
+                    penState = vm.pen,
+                    clears = vm.boardClears,
+                    keeping = edited?.let {
+                        Keeping("✎ Zum Abfragen", vm::editorDrawingMark, vm::editorClearDrawing, vm::editorFinishDrawing)
+                    },
                 )
             },
             top = { Chalkboard(e.opening, e.name.ifBlank { "Name der Variante" }) },
@@ -127,6 +135,8 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 }
                 OutlinedButton(onClick = vm::editorClear, enabled = e.moves.isNotEmpty()) { Text("Alle löschen") }
             }
+            Spacer(Modifier.height(12.dp))
+            DrawingsEditor(vm, e)
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 e.opening, { e.opening = it }, label = { Text("Eröffnung (z. B. Sizilianisch)") },
@@ -303,4 +313,51 @@ private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
             color = Color(0xFFFFB74D),
         )
     }
+}
+
+/**
+ * The drawings kept with the variant: each at a position of the line, with an optional question,
+ * asked after the puzzle. Quick scribbles on the board stay what they are and are never saved.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DrawingsEditor(vm: AppViewModel, e: EditorState) {
+    val edited = e.editedDrawing
+    Text("Zeichnungen zum Abfragen", style = MaterialTheme.typography.titleSmall)
+    if (edited != null) {
+        Text(
+            "Zeichnung ${e.plyLabel(edited.ply)}: auf dem Brett kreist Antippen ein Feld ein, Ziehen malt einen Pfeil " +
+                "(nochmal dasselbe nimmt es weg). ${edited.marks.size} Markierung(en).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(
+            edited.question, vm::editorDrawingQuestion,
+            label = { Text("Frage oder Name") },
+            placeholder = { Text("Wo sind die schwachen Felder?") },
+            singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = vm::editorFinishDrawing) { Text("Fertig") }
+            TextButton(onClick = vm::editorDeleteDrawing) { Text("Zeichnung löschen") }
+        }
+        return
+    }
+    if (e.drawings.isEmpty()) {
+        Text(
+            "Pfeile und Kreise, die mit der Variante gespeichert und nach dem Puzzle abgefragt werden. " +
+                "Schnell Hingemaltes (lange drücken, Rechtsklick, dreimal tippen) bleibt nur bis zum nächsten Zug.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            e.drawings.forEachIndexed { i, d ->
+                val label = e.plyLabel(d.ply).replaceFirstChar(Char::uppercase) + d.question.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()
+                MoveChip("✎ $label", d.ply == e.cursor) { vm.editorEditDrawing(i) }
+            }
+        }
+    }
+    TextButton(onClick = vm::editorNewDrawing) { Text("+ Zeichnung hier (${e.plyLabel(e.cursor)})") }
 }

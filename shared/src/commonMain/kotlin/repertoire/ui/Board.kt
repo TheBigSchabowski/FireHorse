@@ -3,6 +3,7 @@ package repertoire.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -22,6 +23,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -35,14 +37,19 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.withTimeoutOrNull
+import repertoire.core.Mark
+import repertoire.core.MarkColor
 import repertoire.core.Move
+import repertoire.core.toggle
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import repertoire.core.Position
@@ -83,8 +90,34 @@ private val TARGET_DOT = Color(0x40000000)
 private val MARK = Color(0xCC15781B)
 private val DRAW_BAR = Color(0xE0151515)
 
-/** Something drawn on the board: a circle around a square when [from] == [to], else an arrow. */
-private data class BoardMark(val from: Int, val to: Int)
+/** The frame while drawing into something kept, so it never looks like drawing mode. */
+val KEPT = Color(0xCC1450A8)
+
+/** A drawing from memory, checked: what was right, what is missing, what was too much. */
+val KEPT_RIGHT = MARK
+val KEPT_MISSING = Color(0xCCE68F00)
+val KEPT_EXTRA = Color(0xCC9A2020)
+
+/** The lichess brushes. */
+val MarkColor.paint: Color
+    get() = when (this) {
+        MarkColor.GREEN -> MARK
+        MarkColor.RED -> Color(0xCC882020)
+        MarkColor.BLUE -> Color(0xCC003088)
+        MarkColor.YELLOW -> Color(0xCCE68F00)
+    }
+
+/** What the board draws with: a color, and on a single square a filled field instead of a circle. */
+data class Pen(val color: MarkColor = MarkColor.GREEN, val field: Boolean = false)
+
+/** A mark that stays on the board, unlike a scribble: part of a saved drawing, or of one drawn from memory; [color] overrides its own. */
+data class KeptMark(val mark: Mark, val color: Color? = null)
+
+/**
+ * The board draws into something kept instead of scribbling: a tap circles a square, a drag draws an
+ * arrow, each goes to [onMark] (the same one twice takes it away), and no moves are made.
+ */
+class Keeping(val label: String, val onMark: (Mark) -> Unit, val onClear: () -> Unit, val onDone: (() -> Unit)? = null)
 
 /** cburnett pieces (lichess), pre-rendered to PNG because Android cannot draw SVG resources. */
 private val PIECES: Map<Char, DrawableResource> = mapOf(
@@ -102,12 +135,16 @@ private fun piecePainter(piece: Char): Painter = painterResource(PIECES.getValue
  * Only the side to move can be moved, and only legally; promotions become a queen.
  *
  * Holding a square (or the right mouse button) draws on the board like on lichess: dragging to
- * another square makes an arrow, letting go on the same square circles it. The same mark drawn
- * twice disappears again, as does everything once a move is played or the board is touched.
+ * another square makes an arrow, letting go on the same square circles it (or fills it in, see
+ * [Pen]). Shift, Alt or both draw in red, blue or yellow, otherwise in the pen's color. The same mark
+ * drawn twice disappears again, as does everything once a move is played or the board is touched.
  *
  * Three quick taps switch to drawing mode, which is easier on a phone than holding a square: every
  * tap circles a square and every drag draws an arrow, and no moves are made until three taps (or
- * „Fertig“) switch it off again. Nothing drawn is saved.
+ * „Fertig“) switch it off again. Nothing drawn that way is saved.
+ *
+ * [kept] marks are shown in their own colors underneath, and with [keeping] the board draws into
+ * them, framed in blue: a drawing saved with the variant, or one drawn from memory in a quiz.
  */
 @Composable
 fun ChessBoard(
@@ -120,21 +157,31 @@ fun ChessBoard(
     modifier: Modifier = Modifier,
     /** Passed in for the main board, so that Ctrl+B m can switch it from outside. */
     drawModeState: MutableState<Boolean> = remember { mutableStateOf(false) },
+    kept: List<KeptMark> = emptyList(),
+    keeping: Keeping? = null,
+    /** Passed in so that the color and shape stay the same on every board. */
+    penState: MutableState<Pen> = remember { mutableStateOf(Pen()) },
+    /** A new value wipes the scribbles (Ctrl+B u). */
+    clears: Int = 0,
 ) {
     val theme = LocalBoardTheme.current
     var selected by remember(position) { mutableStateOf<Int?>(null) }
     var dragFrom by remember(position) { mutableStateOf<Int?>(null) }
     var dragPos by remember { mutableStateOf(Offset.Zero) }
-    // Drawn marks belong to the position they were drawn in, so a move wipes the board clean.
-    var drawn by remember(position) { mutableStateOf(emptyList<BoardMark>()) }
-    var drawing by remember(position) { mutableStateOf<BoardMark?>(null) }
+    // Drawn marks belong to the position they were drawn in, so a move wipes the board clean,
+    // and so does starting or ending a kept drawing.
+    var drawn by remember(position, keeping != null, clears) { mutableStateOf(emptyList<Mark>()) }
+    var drawing by remember(position) { mutableStateOf<Mark?>(null) }
     var drawMode by drawModeState
+    // Read inside the gestures, which outlive a recomposition.
+    val keepingNow by rememberUpdatedState(keeping)
+    var pen by penState
 
     // Counting quick taps for the triple tap that switches drawing mode on and off.
     var taps by remember { mutableStateOf(0) }
     var lastTapUp by remember { mutableStateOf(0L) }
     // What was drawn before the first of those taps: the taps themselves should leave no trace.
-    var beforeTaps by remember { mutableStateOf(emptyList<BoardMark>()) }
+    var beforeTaps by remember { mutableStateOf(emptyList<Mark>()) }
 
     fun movesFrom(sq: Int) = position.legalMoves().filter { it.from == sq }
 
@@ -167,6 +214,12 @@ fun ChessBoard(
         }
 
         val targets = (dragFrom ?: selected)?.let { from -> movesFrom(from).map { it.to }.toSet() } ?: emptySet()
+
+        // Everything drawn, with its color; filled fields go under the pieces, the rest on top.
+        val marked = kept.map { it.mark to (it.color ?: it.mark.color.paint) } +
+            (drawn + listOfNotNull(drawing)).map { it to it.color.paint }
+        val fields = marked.filter { it.first.field }.associate { (mark, color) -> mark.from to color.copy(alpha = color.alpha * 0.7f) }
+        val lines = marked.filterNot { it.first.field }
 
         Box(
             Modifier.size(squareDp * 8).pointerInput(position, interactive, whiteBottom, squarePx) {
@@ -203,12 +256,21 @@ fun ChessBoard(
                         dragFrom = null
                         var to = sq
                         var upTime = 0L
-                        drawing = BoardMark(sq, sq)
+                        // Shift, Alt or both pick the color as on lichess; without them the pen's.
+                        val keys = currentEvent.keyboardModifiers
+                        val color = when {
+                            keys.isShiftPressed && keys.isAltPressed -> MarkColor.YELLOW
+                            keys.isShiftPressed -> MarkColor.RED
+                            keys.isAltPressed -> MarkColor.BLUE
+                            else -> pen.color
+                        }
+                        fun markTo(to: Int) = Mark(sq, to, color, field = pen.field && to == sq)
+                        drawing = markTo(sq)
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.first()
                             squareOf(change.position)?.let { to = it }
-                            drawing = BoardMark(sq, to)
+                            drawing = markTo(to)
                             change.consume()
                             if (!change.pressed) {
                                 upTime = change.uptimeMillis
@@ -216,13 +278,20 @@ fun ChessBoard(
                             }
                         }
                         drawing = null
-                        val mark = BoardMark(sq, to)
-                        drawn = if (mark in drawn) drawn - mark else drawn + mark
+                        val mark = markTo(to)
+                        val into = keepingNow
+                        if (into != null) into.onMark(mark) else drawn = drawn.toggle(mark)
                         return upTime.takeIf { to == sq && it - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis }
                     }
 
                     // Right mouse button: straight to drawing, as on lichess.
                     if (currentEvent.buttons.isSecondaryPressed) {
+                        drawMark()
+                        return@awaitEachGesture
+                    }
+
+                    // Into a kept drawing: the same, but without the triple tap, which would leave three circles.
+                    if (keepingNow != null) {
                         drawMark()
                         return@awaitEachGesture
                     }
@@ -313,6 +382,7 @@ fun ChessBoard(
                         else -> null
                     }
                     if (overlay != null) Box(Modifier.fillMaxSize().background(overlay))
+                    fields[sq]?.let { Box(Modifier.fillMaxSize().background(it)) }
 
                     val piece = position.pieceAt(sq)
                     if (piece != null && sq != dragFrom) {
@@ -343,17 +413,28 @@ fun ChessBoard(
                 }
             }
 
-            if (drawn.isNotEmpty() || drawing != null || drawMode) {
+            // Drawing into something kept comes first; drawing mode waits underneath until it is done.
+            val frameColor = when {
+                keeping != null -> KEPT
+                drawMode -> MARK
+                else -> null
+            }
+            if (lines.isNotEmpty() || frameColor != null) {
                 Canvas(Modifier.fillMaxSize()) {
                     val centre = { sq: Int -> topLeft(sq) + Offset(squarePx / 2, squarePx / 2) }
-                    for (mark in drawn + listOfNotNull(drawing)) drawMark(mark, centre, squarePx)
-                    if (drawMode) {
+                    for ((mark, color) in lines) drawMark(mark, color, centre, squarePx)
+                    if (frameColor != null) {
                         val frame = squarePx * 0.06f
-                        drawRect(MARK, Offset(frame / 2, frame / 2), Size(boardPx - frame, boardPx - frame), style = Stroke(frame))
+                        drawRect(frameColor, Offset(frame / 2, frame / 2), Size(boardPx - frame, boardPx - frame), style = Stroke(frame))
                     }
                 }
             }
-            if (drawMode) DrawModeBar(squareDp.value, onClear = { drawn = emptyList() }, onDone = { drawMode = false })
+            if (keeping != null) {
+                DrawModeBar(squareDp.value, keeping.label, keeping.onClear, keeping.onDone)
+            } else if (drawMode) {
+                DrawModeBar(squareDp.value, "✎ Zeichnen", onClear = { drawn = emptyList() }, onDone = { drawMode = false })
+            }
+            if (frameColor != null) PenBar(squareDp.value, pen) { pen = it }
 
             val dragging = dragFrom
             val draggedPiece = dragging?.let { position.pieceAt(it) }
@@ -371,30 +452,72 @@ fun ChessBoard(
 
 /** Says that drawing mode is on and how to leave it; small enough to cover little of the top rank. */
 @Composable
-private fun BoxScope.DrawModeBar(square: Float, onClear: () -> Unit, onDone: () -> Unit) {
+private fun BoxScope.DrawModeBar(square: Float, label: String, onClear: () -> Unit, onDone: (() -> Unit)?) {
     val size = (square * 0.2f).coerceIn(10f, 15f).sp
     Row(
         Modifier.align(Alignment.TopCenter).padding(top = (square * 0.1f).dp)
             .background(DRAW_BAR, RoundedCornerShape(50)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("✎ Zeichnen", color = Color.White, fontSize = size, modifier = Modifier.padding(start = 12.dp, end = 6.dp))
+        Text(label, color = Color.White, fontSize = size, modifier = Modifier.padding(start = 12.dp, end = 6.dp))
         Text(
             "Löschen", color = Color(0xFFB0B0B0), fontSize = size,
-            modifier = Modifier.clickable(onClick = onClear).padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.clickable(onClick = onClear)
+                .padding(start = 8.dp, end = if (onDone == null) 12.dp else 8.dp, top = 6.dp, bottom = 6.dp),
         )
-        Text(
-            "Fertig", color = Color(0xFF8BD18E), fontSize = size,
-            modifier = Modifier.clickable(onClick = onDone).padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
-        )
+        if (onDone != null) {
+            Text(
+                "Fertig", color = Color(0xFF8BD18E), fontSize = size,
+                modifier = Modifier.clickable(onClick = onDone).padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+            )
+        }
     }
 }
 
-/** One arrow or circle in lichess green. */
-private fun DrawScope.drawMark(mark: BoardMark, centre: (Int) -> Offset, square: Float) {
+/** The pen: four colors and circle or field, at the bottom of the board while drawing. */
+@Composable
+private fun BoxScope.PenBar(square: Float, pen: Pen, onPen: (Pen) -> Unit) {
+    val dot = (square * 0.42f).coerceIn(18f, 28f).dp
+    Row(
+        Modifier.align(Alignment.BottomCenter).padding(bottom = (square * 0.1f).dp)
+            .background(DRAW_BAR, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (color in MarkColor.entries) {
+            val chosen = color == pen.color
+            Box(
+                Modifier.padding(horizontal = 4.dp).size(dot)
+                    .border(2.dp, if (chosen) Color.White else Color.Transparent, CircleShape)
+                    .padding(3.dp)
+                    .background(color.paint.copy(alpha = 1f), CircleShape)
+                    .clickable { onPen(pen.copy(color = color)) },
+            )
+        }
+        // Circle or field: shown as what a tap on a square will draw.
+        for (field in listOf(false, true)) {
+            val chosen = pen.field == field
+            Box(
+                Modifier.padding(start = if (field) 4.dp else 12.dp, end = 4.dp).size(dot)
+                    .border(2.dp, if (chosen) Color.White else Color.Transparent, RoundedCornerShape(4.dp))
+                    .clickable { onPen(pen.copy(field = field)) }
+                    .padding(5.dp),
+            ) {
+                val paint = pen.color.paint.copy(alpha = 1f)
+                if (field) {
+                    Box(Modifier.fillMaxSize().background(paint))
+                } else {
+                    Box(Modifier.fillMaxSize().border(2.dp, paint, CircleShape))
+                }
+            }
+        }
+    }
+}
+
+/** One arrow or circle, as on lichess; fields are filled in with the squares. */
+private fun DrawScope.drawMark(mark: Mark, color: Color, centre: (Int) -> Offset, square: Float) {
     val from = centre(mark.from)
     if (mark.from == mark.to) {
-        drawCircle(MARK, radius = square * 0.45f, center = from, style = Stroke(width = square * 0.08f))
+        drawCircle(color, radius = square * 0.45f, center = from, style = Stroke(width = square * 0.08f))
         return
     }
     val to = centre(mark.to)
@@ -403,7 +526,7 @@ private fun DrawScope.drawMark(mark: BoardMark, centre: (Int) -> Offset, square:
     // The shaft starts outside the piece it comes from and stops where the head begins.
     val shaftStart = from + direction * (square * 0.25f)
     val shaftEnd = to - direction * head
-    drawLine(MARK, shaftStart, shaftEnd, strokeWidth = square * 0.16f, cap = StrokeCap.Round)
+    drawLine(color, shaftStart, shaftEnd, strokeWidth = square * 0.16f, cap = StrokeCap.Round)
     val side = Offset(-direction.y, direction.x) * (head * 0.45f)
     drawPath(
         Path().apply {
@@ -412,6 +535,6 @@ private fun DrawScope.drawMark(mark: BoardMark, centre: (Int) -> Offset, square:
             lineTo(shaftEnd.x - side.x, shaftEnd.y - side.y)
             close()
         },
-        MARK,
+        color,
     )
 }

@@ -106,6 +106,26 @@ fun main() {
     render("theory-quiz") { it.solveWithTheory() }
     render("theory-checked") { vm -> vm.solveWithTheory(); vm.checkGaps() }
     render("theory-link") { vm -> vm.solveWithTheory(); vm.showPly(6) }
+    fun AppViewModel.withDrawing() {
+        sample()
+        editVariant(library.variants.last())
+        editorGoTo(9)
+        editorNewDrawing()
+        for (m in listOf("yellow:#d5", "red:b7b5", "f3g4", "blue:e4")) editorDrawingMark(repertoire.core.Mark.parse(m))
+        editorDrawingQuestion("Was will Weiß, was Schwarz?")
+    }
+    render("drawing-edit") { it.withDrawing() }
+    render("drawing-view") { vm -> vm.withDrawing(); vm.editorFinishDrawing() }
+    fun AppViewModel.askDrawing() {
+        withDrawing()
+        saveEditor()
+        practice(library.variants.last().id)
+        for (uci in session!!.attempt!!.quiz.variant.moves) submitMove(Move.fromUci(uci))
+        drawingMark(repertoire.core.Mark.parse("yellow:#d5"))
+        drawingMark(repertoire.core.Mark.parse("g2g4"))
+    }
+    render("drawing-quiz") { it.askDrawing() }
+    render("drawing-checked") { vm -> vm.askDrawing(); vm.confirm() }
     render("single-move") { vm ->
         vm.sample()
         vm.practiceMoves(vm.library.variants.last().id)
