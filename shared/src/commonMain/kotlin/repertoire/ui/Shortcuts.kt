@@ -1,6 +1,9 @@
 package repertoire.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.composed
+import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.focus.focusRequester
@@ -68,6 +71,16 @@ import repertoire.core.currentTimeMillis
 import repertoire.shared.resources.Res
 import repertoire.shared.resources.wn
 
+/**
+ * Marks a text field: while it has the focus, keys without Ctrl+B (Shift+S, the drawing keys, …)
+ * are left to it, see [AppViewModel.typing].
+ */
+fun Modifier.typing(vm: AppViewModel): Modifier = composed {
+    val field = remember { Any() }
+    DisposableEffect(field) { onDispose { vm.typingIn -= field } }
+    onFocusChanged { if (it.isFocused) vm.typingIn += field else vm.typingIn -= field }
+}
+
 /** True on a phone: the horse button instead of keyboard shortcuts. */
 val LocalTouch = staticCompositionLocalOf { false }
 
@@ -108,6 +121,7 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     PASTE_PGN('x', "PGN einfügen", 3),
     COPY_PGN('v', "PGN bis zur Stellung kopieren", null),
     COPY_FEN('y', "FEN der Stellung kopieren", null),
+    COPY_ALL('p', "Alles kopieren: PGN mit Theorie und Zeichnungen", null),
     PASTE_FEN('f', "FEN einfügen", 4),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
     DRAW_KEPT('n', "Zeichnung zum Abfragen an/aus (im Editor)", null),
@@ -310,7 +324,7 @@ class ShortcutKeys(private val vm: AppViewModel) {
      * letters typed into a text field stay there.
      */
     fun handleDrawing(event: KeyEvent): Boolean {
-        if (event.type != KeyEventType.KeyDown || !vm.penActive || vm.prefix || vm.keyCapture != null) return false
+        if (event.type != KeyEventType.KeyDown || !vm.penActive || vm.prefix || vm.keyCapture != null || vm.typing) return false
         if (event.isCtrlPressed || event.isMetaPressed || event.isAltPressed) return false
         if (event.key == Key.Escape) return vm.runDrawKey(DrawKey.DONE).let { true }
         val char = charOf(event) ?: return false
@@ -322,11 +336,11 @@ class ShortcutKeys(private val vm: AppViewModel) {
 
     /**
      * Shift+A: the drawings on the board out of sight and back; Shift+S: the list of all shortcuts;
-     * Ctrl+N: pick an opening by its number. Called after the focused element had its turn, so a
-     * capital letter typed into a text field stays there.
+     * Ctrl+N: pick an opening by its number. Not while a text field has the focus: there a capital
+     * letter is just typed. (A text field does not take the key press itself, only what it types.)
      */
     fun handleDirect(event: KeyEvent): Boolean {
-        if (event.type != KeyEventType.KeyDown || vm.prefix || vm.keyCapture != null) return false
+        if (event.type != KeyEventType.KeyDown || vm.prefix || vm.keyCapture != null || vm.typing) return false
         if (event.isMetaPressed || event.isAltPressed) return false
         when {
             event.isCtrlPressed && !event.isShiftPressed && event.key == Key.N -> {
@@ -398,6 +412,7 @@ internal val Command.short: String get() = when (this) {
     Command.PASTE_FEN -> "FEN"
     Command.COPY_FEN -> "FEN kopieren"
     Command.COPY_PGN -> "PGN kopieren"
+    Command.COPY_ALL -> "Alles kopieren"
     Command.PLAY -> "Abspielen"
     Command.SETTINGS -> "Einstellungen"
 }

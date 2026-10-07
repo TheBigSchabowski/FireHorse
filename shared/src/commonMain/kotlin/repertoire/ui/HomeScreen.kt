@@ -272,7 +272,7 @@ internal fun PlaylistNameDialog(vm: AppViewModel, n: PlaylistNaming) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { vm.confirmNaming() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+                modifier = Modifier.typing(vm).fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Enter) vm.confirmNaming().let { true } else false
                 },
             )
@@ -427,7 +427,7 @@ internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
                     maxLines = 8,
                     isError = p.error != null,
                     // The dialog may have a window of its own, which the main window's keys never see.
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent(vm.shortcutKeys::handle),
+                    modifier = Modifier.typing(vm).fillMaxWidth().focusRequester(focus).onPreviewKeyEvent(vm.shortcutKeys::handle),
                 )
                 p.error?.let {
                     Spacer(Modifier.height(8.dp))

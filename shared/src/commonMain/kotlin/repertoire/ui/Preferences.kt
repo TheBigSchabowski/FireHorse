@@ -773,13 +773,13 @@ private fun HexColor(vm: AppViewModel, index: Int, current: PenColor) {
             code, { code = it },
             label = { Text("Code") }, placeholder = { Text("#7FFFD4") },
             singleLine = true, isError = typed == null,
-            modifier = Modifier.width(130.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
+            modifier = Modifier.typing(vm).width(130.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
         )
         OutlinedTextField(
             name, { name = it },
             label = { Text("Name") }, placeholder = { Text("Aquamarin") },
             singleLine = true,
-            modifier = Modifier.width(170.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
+            modifier = Modifier.typing(vm).width(170.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
         )
         Button(onClick = { vm.setPenHex(index, code, name) }, enabled = typed != null) { Text("Für Stift ${index + 1}") }
     }

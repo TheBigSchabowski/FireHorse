@@ -144,12 +144,12 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 e.opening, { e.opening = it }, label = { Text("Eröffnung (z. B. Sizilianisch)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, modifier = Modifier.typing(vm).fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 e.name, { e.name = it }, label = { Text("Variante (z. B. Scheveningen)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, modifier = Modifier.typing(vm).fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
             TheoryEditor(vm, e)
@@ -278,7 +278,7 @@ private fun TheoryEditor(vm: AppViewModel, e: EditorState) {
         label = { Text("Theorie") },
         placeholder = { Text("Wenn Weiß g4 spielt, dann ((Nfd7)).") },
         minLines = 4,
-        modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+        modifier = Modifier.typing(vm).fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
             if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when {
                 // Cmd/Ctrl+Shift+C as in Anki: make a gap.
@@ -340,7 +340,7 @@ private fun DrawingsEditor(vm: AppViewModel, e: EditorState) {
             edited.question, vm::editorDrawingQuestion,
             label = { Text("Frage oder Name") },
             placeholder = { Text("Wo sind die schwachen Felder?") },
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
+            singleLine = true, modifier = Modifier.typing(vm).fillMaxWidth(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = vm::editorFinishDrawing) { Text("Fertig") }

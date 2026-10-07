@@ -70,6 +70,74 @@ object Pgn {
         return header + moves
     }
 
+    /** lichess's four arrow colors, which are also the first four pens by default. */
+    private val LICHESS_COLORS = listOf('G' to 0x15781B, 'R' to 0x882020, 'B' to 0x003088, 'Y' to 0xE68F00)
+
+    /** The lichess color closest to [pen]: lichess (and ChessBase) only know these four. */
+    private fun lichessColor(pen: PenColor): Char = LICHESS_COLORS.minBy { (_, rgb) ->
+        val dr = (rgb shr 16 and 0xFF) - (pen.rgb shr 16 and 0xFF)
+        val dg = (rgb shr 8 and 0xFF) - (pen.rgb shr 8 and 0xFF)
+        val db = (rgb and 0xFF) - (pen.rgb and 0xFF)
+        dr * dr + dg * dg + db * db
+    }.first
+
+    /** A comment may not close itself early, and a header value may not end in the middle. */
+    private fun commentText(text: String) = text.replace('{', '(').replace('}', ')').trim()
+
+    /** A drawing as lichess writes it into a comment: its question, then "[%csl Gd5][%cal Ge2e4]". */
+    private fun drawingComment(d: Drawing, pens: List<PenColor>): String {
+        fun code(m: Mark) = lichessColor(pens[m.color]) + squareName(m.from) + if (m.from == m.to) "" else squareName(m.to)
+        val squares = d.marks.filter { it.from == it.to }.joinToString(",", transform = ::code)
+        val arrows = d.marks.filter { it.from != it.to }.joinToString(",", transform = ::code)
+        return listOf(
+            commentText(d.question),
+            if (squares.isEmpty()) "" else "[%csl $squares]",
+            if (arrows.isEmpty()) "" else "[%cal $arrows]",
+        ).filter { it.isNotEmpty() }.joinToString(" ")
+    }
+
+    /**
+     * All of [variant] as PGN: opening and name as headers, every move, each drawing as a comment
+     * after its move (arrows and circles as lichess writes them, so they show up there), and the
+     * theory at the end with its gaps filled in. [pens] are what the pens look like, for the
+     * nearest of lichess's colors. Reads back with [parse], which takes the moves and names.
+     */
+    fun exportAll(variant: Variant, pens: List<PenColor> = Ink.DEFAULT): String {
+        fun header(value: String) = value.replace('"', '\'').trim()
+        val title = listOf(variant.opening, variant.name).map(::header).filter { it.isNotEmpty() }
+        val headers = buildList {
+            add("Event" to title.joinToString(": ").ifEmpty { "?" })
+            if (variant.opening.isNotBlank()) add("Opening" to header(variant.opening))
+            if (variant.name.isNotBlank()) add("Variation" to header(variant.name))
+            add("Result" to "*")
+            if (variant.setUp) {
+                add("SetUp" to "1")
+                add("FEN" to variant.startFen)
+            }
+        }
+
+        val parts = mutableListOf<String>()
+        // After a comment, a black move needs its number again ("3... Nf6").
+        var numberNext = true
+        fun comment(text: String) {
+            if (text.isEmpty()) return
+            parts += "{ $text }"
+            numberNext = true
+        }
+        fun drawingsAt(ply: Int) = comment(variant.drawings.filter { it.ply == ply }.joinToString(" ") { drawingComment(it, pens) })
+
+        drawingsAt(0)
+        variant.numberedSan().forEachIndexed { i, numbered ->
+            val black = numbered.substringBefore(' ').endsWith("...")
+            parts += if (black && !numberNext) numbered.substringAfter(' ') else numbered
+            numberNext = false
+            drawingsAt(i + 1)
+        }
+        comment(commentText(Cloze.solved(variant.theory)))
+        parts += "*"
+        return headers.joinToString("\n") { (k, v) -> "[$k \"$v\"]" } + "\n\n" + parts.joinToString(" ")
+    }
+
     /** Reads [text]; throws [IllegalArgumentException] with a German explanation if it does not work out. */
     fun parse(text: String): PastedLine {
         // Web pages hand out non-breaking spaces, and some editors a byte-order mark.

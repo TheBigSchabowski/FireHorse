@@ -108,6 +108,7 @@ Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` oder einfa
 aller Kürzel; darin blättern ↑ ↓ (←/→ seitenweise), `Shift+S` oder `Esc` schließt sie wieder.
 `Strg+N` und dann eine Ziffer startet „Playlist lernen“ der Eröffnung an dieser Stelle der Startseite
 (`1` die erste, angepinnte zuerst, bis `9`); unten steht dabei, welche Nummer welche Eröffnung ist.
+`Shift+S`, `Shift+A` und `Strg+N` gelten nicht, solange der Cursor in einem Textfeld steht; dort wird getippt.
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
 Die Liste kommt immer auch mit `?` oder `h`. `Strg+B` ist der Navigator: ein Buchstabe, der noch
@@ -129,6 +130,7 @@ oder ganz ausschalten.
 | `Strg+B x` | 3 Schritte halten | PGN einfügen |
 | `Strg+B v` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
 | `Strg+B y` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
+| `Strg+B p` | Kürzel-Liste antippen | Alles kopieren: die ganze Variante als PGN mit Eröffnung, Name, Theorie und Zeichnungen (als `[%cal]`/`[%csl]` wie bei lichess) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |

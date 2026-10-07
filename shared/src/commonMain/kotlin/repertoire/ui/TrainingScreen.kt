@@ -381,7 +381,7 @@ private fun TheoryQuiz(vm: AppViewModel, session: TrainingSession, variant: Vari
                                 onNext = { focusManager.moveFocus(FocusDirection.Next) },
                                 onDone = { vm.confirm() },
                             ),
-                            modifier = Modifier.width((chars * 9 + 14).dp)
+                            modifier = Modifier.typing(vm).width((chars * 9 + 14).dp)
                                 .focusRequester(focusers[gap.index])
                                 .onPreviewKeyEvent {
                                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

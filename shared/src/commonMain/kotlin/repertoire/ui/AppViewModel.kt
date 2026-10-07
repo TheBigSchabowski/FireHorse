@@ -266,6 +266,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     var showShortcuts by mutableStateOf(false)
 
+    /** The text fields that have the focus right now (one at most, but leaving one and entering the next may overlap). */
+    val typingIn = mutableSetOf<Any>()
+
+    /** A text field has the focus: keys without Ctrl+B are typed, not commands. */
+    val typing: Boolean get() = typingIn.isNotEmpty()
+
     /** Ctrl+N was pressed; a digit picks the opening whose playlist is learned. */
     var picking by mutableStateOf(false)
 
@@ -381,6 +387,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
+            Command.COPY_ALL -> copyAll()
             Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
                 editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
                 command == Command.NEW_VARIANT -> {
@@ -429,6 +436,28 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             else -> {
                 copy(Pgn.export(line.startFen, line.numbered))
                 flash = "PGN kopiert (${line.numbered.size} Halbzüge)."
+            }
+        }
+    }
+
+    /**
+     * Ctrl+B p: the whole variant on the board as PGN, with names, theory and drawings: the one in
+     * the editor as it is right now, or the puzzle's.
+     */
+    private fun copyAll() {
+        val variant = editor?.asVariant() ?: session?.attempt?.quiz?.variant
+        val copy = copyToClipboard
+        when {
+            variant == null -> flash = "Alles kopieren geht in einer Variante oder einem Puzzle."
+            copy == null -> flash = "Hier gibt es keine Zwischenablage."
+            variant.moves.isEmpty() && !variant.setUp -> flash = "Noch kein Zug auf dem Brett."
+            else -> {
+                copy(Pgn.exportAll(variant, library.settings.penColors))
+                val extras = listOfNotNull(
+                    "Theorie".takeIf { variant.theory.isNotBlank() },
+                    variant.drawings.size.takeIf { it > 0 }?.let { if (it == 1) "1 Zeichnung" else "$it Zeichnungen" },
+                )
+                flash = "PGN mit allem kopiert (${variant.moves.size} Halbzüge" + extras.joinToString("") { ", $it" } + ")."
             }
         }
     }

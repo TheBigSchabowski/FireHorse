@@ -415,6 +415,38 @@ class ShortcutsTest {
     }
 
     @Test
+    fun inATextFieldShiftLettersAreTyped() {
+        val vm = app()
+        val field = Any()
+        vm.typingIn += field
+        assertFalse(vm.shortcutKeys.handleDirect(KeyEvent(Key.S, KeyEventType.KeyDown, 'S'.code, isShiftPressed = true)))
+        assertFalse(vm.shortcutKeys.handleDirect(KeyEvent(Key.N, KeyEventType.KeyDown, 0x0e, isCtrlPressed = true)))
+        assertFalse(vm.showShortcuts)
+        assertFalse(vm.picking)
+        // Ctrl+B still works there.
+        vm.ctrlB()
+        vm.key(Key.Slash, '?')
+        assertTrue(vm.showShortcuts)
+        vm.typingIn -= field
+        vm.showShortcuts = false
+        assertTrue(vm.shortcutKeys.handleDirect(KeyEvent(Key.S, KeyEventType.KeyDown, 'S'.code, isShiftPressed = true)))
+        assertTrue(vm.showShortcuts)
+    }
+
+    @Test
+    fun ctrlBPCopiesTheWholeVariant() {
+        val vm = app()
+        val copied = mutableListOf<String>()
+        vm.copyToClipboard = { copied += it }
+        vm.addVariant("Sizilianisch", "e4", "c5", "Nf3")
+        vm.practice(vm.library.variants.single().id)
+        vm.ctrlB()
+        vm.key(Key.P, 'p')
+        assertTrue(copied.last().startsWith("[Event \"Sizilianisch: e4 c5 Nf3\"]"), copied.last())
+        assertTrue(copied.last().endsWith("1. e4 c5 2. Nf3 *"), copied.last())
+    }
+
+    @Test
     fun copiedPgnReadsBackFromASetUpPosition() {
         val fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
         val line = repertoire.core.Pgn.parse(repertoire.core.Pgn.export(fen, listOf("2. Nf3", "2... d6")))

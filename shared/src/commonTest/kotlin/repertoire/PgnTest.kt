@@ -1,6 +1,10 @@
 package repertoire
 
+import repertoire.core.Drawing
 import repertoire.core.Exchange
+import repertoire.core.Ink
+import repertoire.core.Mark
+import repertoire.core.PenColor
 import repertoire.core.Pgn
 import repertoire.core.Position
 import repertoire.core.Progress
@@ -174,5 +178,45 @@ class PgnTest {
         // A normal variant does not carry the field around.
         val plain = Variant("v2", "", "Offen", Exchange.parseMoves("1. e4 e5"))
         assertFalse(Exchange.export(listOf(plain), Progress()).contains("startFen"))
+    }
+
+    @Test
+    fun everythingGoesIntoThePgnAndTheMovesReadBack() {
+        val moves = Exchange.parseMoves("1. e4 c5 2. Nf3 d6")
+        val d5 = 4 * 8 + 3
+        val e2 = 1 * 8 + 4
+        val e4 = 3 * 8 + 4
+        val v = Variant(
+            "v1", "Sizilianisch", "Scheveningen \"klein\"", moves, playWhite = false,
+            theory = "Schwarz will ((d5)) spielen. {Wichtig}",
+            drawings = listOf(
+                Drawing(2, listOf(Mark(d5, d5, 1), Mark(e2, e4, 0)), "Wo greift Weiß an?"),
+                // Pen 5, set to a blue, comes out blue on lichess.
+                Drawing(4, listOf(Mark(d5, d5, 4, field = true))),
+            ),
+        )
+        val pens = Ink.DEFAULT.toMutableList().also { it[4] = PenColor(0x1E40C0, "Königsblau") }
+        val pgn = Pgn.exportAll(v, pens)
+        assertEquals(
+            """
+            [Event "Sizilianisch: Scheveningen 'klein'"]
+            [Opening "Sizilianisch"]
+            [Variation "Scheveningen 'klein'"]
+            [Result "*"]
+
+            1. e4 c5 { Wo greift Weiß an? [%csl Rd5] [%cal Ge2e4] } 2. Nf3 d6 { [%csl Bd5] } { Schwarz will d5 spielen. (Wichtig) } *
+            """.trimIndent(),
+            pgn,
+        )
+        val back = Pgn.parse(pgn)
+        assertEquals(moves, back.moves)
+        assertEquals("Sizilianisch", back.opening)
+        assertEquals("Scheveningen 'klein'", back.name)
+    }
+
+    @Test
+    fun aBlackMoveAfterACommentGetsItsNumber() {
+        val v = Variant("v1", "", "", Exchange.parseMoves("1. e4 c5"), drawings = listOf(Drawing(1, listOf(Mark(0, 0)))))
+        assertTrue(Pgn.exportAll(v).endsWith("1. e4 { [%csl Ga1] } 1... c5 *"))
     }
 }
