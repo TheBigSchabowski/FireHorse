@@ -27,15 +27,43 @@ enum class Ink(val label: String, val rgb: Int) {
     WHITE("Weiß", 0xFAFAFA),
     ;
 
+    val pen: PenColor get() = PenColor(rgb, label)
+
     companion object {
         const val PENS = 6
 
         /** The first four as on lichess, then two more. */
-        val DEFAULT: List<Ink> = listOf(GREEN, RED, BLUE, ORANGE, PURPLE, TEAL)
+        val DEFAULT: List<PenColor> = listOf(GREEN, RED, BLUE, ORANGE, PURPLE, TEAL).map { it.pen }
 
-        /** The six pens from their saved names; a missing or unknown one keeps its default. */
-        fun pens(names: List<String>): List<Ink> =
-            DEFAULT.mapIndexed { i, d -> names.getOrNull(i)?.let { n -> entries.firstOrNull { it.name == n } } ?: d }
+        /** The six pens as saved; a missing or unreadable one keeps its default. */
+        fun pens(saved: List<String>): List<PenColor> =
+            DEFAULT.mapIndexed { i, d -> saved.getOrNull(i)?.let(PenColor::parse) ?: d }
+    }
+}
+
+/** The color of a pen: one of the [Ink]s, or any color given as "#7FFFD4", with the name feedback calls it by. */
+data class PenColor(val rgb: Int, val label: String) {
+    /** "#7FFFD4" */
+    val hex: String get() = "#" + rgb.toString(16).uppercase().padStart(6, '0')
+
+    /** How it is saved: the name of an [Ink] ("GREEN"), or "#7FFFD4 Aquamarin". */
+    val saved: String get() = Ink.entries.firstOrNull { it.pen == this }?.name ?: "$hex $label"
+
+    companion object {
+        private val HEX = Regex("""#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})""")
+
+        /** "GREEN", "#7FFFD4 Aquamarin", "#7FFFD4", "7fffd4" or "#7FD"; null if it is none of these. */
+        fun parse(text: String): PenColor? {
+            val t = text.trim()
+            Ink.entries.firstOrNull { it.name == t }?.let { return it.pen }
+            val code = t.substringBefore(' ')
+            val digits = HEX.matchEntire(code)?.groupValues?.get(1) ?: return null
+            val six = if (digits.length == 3) digits.map { "$it$it" }.joinToString("") else digits
+            val rgb = six.toInt(16)
+            val name = t.substringAfter(' ', "").trim()
+            // Without a name it is called by its code, or by the ink that has exactly this color.
+            return PenColor(rgb, name.ifEmpty { Ink.entries.firstOrNull { it.rgb == rgb }?.label ?: "#" + six.uppercase() })
+        }
     }
 }
 
@@ -67,7 +95,7 @@ data class Mark(val from: Int, val to: Int, val color: Int = 0, val field: Boole
     }
 
     /** "Kreis d5 (Grün)", "Pfeil e2→e4 (Rot)", for feedback; [pens] says what the pens are set to. */
-    fun describe(pens: List<Ink> = Ink.DEFAULT): String {
+    fun describe(pens: List<PenColor> = Ink.DEFAULT): String {
         val noun = when {
             field -> "Feld"
             from == to -> "Kreis"

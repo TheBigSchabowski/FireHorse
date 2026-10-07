@@ -84,8 +84,9 @@ installieren“ erlauben.
   weg, „Fertig“ oder nochmal dreimal tippen beendet den Modus. Gezeichnetes wird nicht gespeichert.
   Unten auf dem Brett liegt dabei eine Leiste mit sechs Stiften und der Wahl zwischen Kreis und
   ausgefülltem Feld. Am Computer wechseln ← → den Stift und ↑ ↓ zwischen Kreis und Feld; Shift malt
-  mit Stift 2, Alt mit 3, beide mit 4. Die Farbe jedes Stifts ist frei wählbar (Einstellungen →
-  Konfiguration → Brett → Zeichenfarben, 16 Farben); schon Gezeichnetes nimmt sie an.
+  mit Stift 2, Alt mit 3, beide mit 4. Die Farbe jedes Stifts ist frei wählbar (`Strg+B k` oder
+  Einstellungen → Konfiguration → Brett → Zeichenfarben): aus 16 Farben oder als eigener Code mit
+  Namen, z. B. `#7FFFD4` „Aquamarin“. Schon Gezeichnetes nimmt die neue Farbe an.
 - **Zeichnungen zum Abfragen:** im Editor legt „+ Zeichnung hier“ (oder `Strg+B n`) an der Stellung auf dem Brett eine
   Zeichnung an, die mit der Variante gespeichert wird (blauer Rahmen: Antippen kreist ein, Ziehen malt
   einen Pfeil), dazu optional eine Frage oder ein Name. Beim Durchgehen und Abspielen ist sie blau zu
@@ -106,7 +107,8 @@ installieren“ erlauben.
 Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die Liste aller Kürzel.
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
-Die Liste kommt immer auch mit `?` oder `h`.
+Die Liste kommt immer auch mit `?` oder `h`. `Strg+B` ist der Navigator: ein Buchstabe, der noch
+keinen Befehl hat, öffnet die Konfiguration bei den Tastenkürzeln, wo du ihn belegen kannst.
 Am Handy übernimmt das **Pferd** unten rechts (lässt sich nach links legen oder ausblenden): kurz antippen zeigt die Liste, gedrückt halten wählt
 nach der Zeit – daneben steht, was beim Loslassen passiert, wegziehen bricht ab. Wie lang ein Schritt
 dauert (0,5 bis 3 s, Standard 1 s), steht in den Einstellungen.
@@ -122,7 +124,8 @@ oder ganz ausschalten.
 | `Strg+B ?` | antippen | Liste aller Kürzel (Einträge sind anklickbar) |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
-| `Strg+B u` | Kürzel-Liste antippen | Gezeichnetes auf dem Brett sofort wegwischen |
+| `Strg+B x` | Kürzel-Liste antippen | Gezeichnetes auf dem Brett sofort wegwischen |
+| `Strg+B k` | Kürzel-Liste antippen | Zeichenfarben einstellen (auch eigene wie `#7FFFD4`) |
 | `Strg+B c` | 2 Schritte halten | Neue Variante |
 | `Strg+B p` | 3 Schritte halten | PGN einfügen |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
@@ -130,6 +133,12 @@ oder ganz ausschalten.
 | `Strg+B s` | Doppeltippen Mitte rechts | Einstellungen und Hilfe |
 | `Strg+B 2` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
 | `Strg+B 3` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
+
+**Beim Zeichnen** (Zeichenmodus, Zeichnung zum Abfragen, Abfrage aus dem Gedächtnis) ist jede Taste
+allein ein Befehl, ohne `Strg+B`: `1`–`6` Stift wählen, `o` Kreis oder ausgefülltes Feld, `x` alles
+wegwischen, `k` Zeichenfarben, `u` oder `Esc` Zeichnen beenden, dazu ← → Stift und ↑ ↓ Kreis/Feld.
+Steht der Cursor in einem Textfeld, landen Buchstaben dort; ein Tipp aufs Brett holt die Tasten
+zurück. Auch diese Tasten lassen sich unter Konfiguration → Tastenkürzel umbelegen.
 
 Das geht auch mitten in einem Puzzle: die neue Variante legt sich darüber, nach Speichern oder
 Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wird dabei nie

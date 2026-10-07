@@ -46,11 +46,15 @@ fun main() = application {
             val command = event.isMetaPressed || event.isCtrlPressed
             when {
                 event.type != KeyEventType.KeyDown -> false
+                // The colors window: Escape closes it, nothing underneath is answered blindly.
+                viewModel.colorsOpen -> (event.key == Key.Escape).also { if (it) viewModel.colorsOpen = false }
                 // Escape steps back out of the preferences; the screens underneath stay out of reach.
                 viewModel.prefs != null -> (event.key == Key.Escape).also { if (it) viewModel.prefsBack() }
                 // Cmd/Ctrl+T opens the theory field while entering a variant.
                 command && event.key == Key.T && viewModel.editor != null -> viewModel.toggleTheory().let { true }
-                // While drawing, ← → switch the pen and ↑ ↓ circle or field.
+                // While drawing, single keys have meanings of their own (1–6, o, u, k, m, Esc) …
+                viewModel.shortcutKeys.handleDrawing(event) -> true
+                // … and ← → switch the pen, ↑ ↓ circle or field.
                 viewModel.penActive && event.key == Key.DirectionLeft -> viewModel.penStep(-1).let { true }
                 viewModel.penActive && event.key == Key.DirectionRight -> viewModel.penStep(1).let { true }
                 viewModel.penActive && (event.key == Key.DirectionUp || event.key == Key.DirectionDown) -> viewModel.penToggleField().let { true }

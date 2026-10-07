@@ -22,6 +22,8 @@ data class Settings(
     val prefixKey: String = "b",
     /** Keys changed from their default, by `Command` name; the rest keep theirs. */
     val keys: Map<String, String> = emptyMap(),
+    /** Keys while drawing changed from their default, by `DrawKey` name. */
+    val drawKeys: Map<String, String> = emptyMap(),
     /** Time between two moves when a variant is played. */
     val playDelayMs: Int = 1500,
     /** The player starts over after the last move. */
@@ -32,10 +34,10 @@ data class Settings(
     val horseLeft: Boolean = false,
     /** Name of a `BoardTheme`. */
     val boardTheme: String = "classic",
-    /** The [Ink] of each of the six pens to draw with, by name. */
-    val pens: List<String> = Ink.DEFAULT.map { it.name },
+    /** The color of each of the six pens to draw with, as [PenColor.saved]: "GREEN" or "#7FFFD4 Aquamarin". */
+    val pens: List<String> = Ink.DEFAULT.map { it.saved },
 ) {
-    val inks: List<Ink> get() = Ink.pens(pens)
+    val penColors: List<PenColor> get() = Ink.pens(pens)
 }
 
 @Serializable

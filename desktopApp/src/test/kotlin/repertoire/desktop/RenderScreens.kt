@@ -125,6 +125,11 @@ fun main() {
         drawingMark(repertoire.core.Mark.parse("g2g4"))
     }
     render("drawing-quiz") { it.askDrawing() }
+    render("farben") { vm ->
+        vm.withDrawing()
+        vm.setPenHex(4, "#7FFFD4", "Aquamarin")
+        vm.run(Command.COLORS)
+    }
     render("drawing-checked") { vm -> vm.askDrawing(); vm.confirm() }
     render("single-move") { vm ->
         vm.sample()
@@ -190,6 +195,10 @@ fun main() {
         vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'g')
         vm.openConfig()
         vm.keyCapture = KeyTarget.Of(Command.PASTE_FEN)
+    }
+    render("freie-taste") { vm ->
+        vm.sample()
+        vm.openKeys('z')
     }
     render("hilfe") { vm ->
         vm.sample()

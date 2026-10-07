@@ -21,6 +21,7 @@ import repertoire.core.Move
 import repertoire.core.MoveRefs
 import repertoire.core.Outcome
 import repertoire.core.PastedLine
+import repertoire.core.PenColor
 import repertoire.core.Pgn
 import repertoire.core.Position
 import repertoire.core.Progress
@@ -295,6 +296,32 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         pen.value = pen.value.copy(field = !pen.value.field)
     }
 
+    /** A key while drawing ([DrawKey]): pick a pen, circle or field, wipe, colors, done. */
+    fun runDrawKey(key: DrawKey) {
+        if (!penActive) return
+        key.pen?.let {
+            pen.value = pen.value.copy(color = it)
+            return
+        }
+        when (key) {
+            DrawKey.SHAPE -> penToggleField()
+            DrawKey.CLEAR -> clearBoard()
+            DrawKey.COLORS -> colorsOpen = !colorsOpen
+            DrawKey.DONE -> endDrawing()
+            else -> Unit
+        }
+    }
+
+    /** Leaves drawing mode, or finishes the saved drawing; a drawing from memory waits for „Prüfen“. */
+    private fun endDrawing() {
+        val e = editor
+        when {
+            e != null && e.editedDrawing != null -> editorFinishDrawing()
+            e != null -> e.drawMode.value = false
+            else -> session?.drawMode?.value = false
+        }
+    }
+
     /** Bumped by Ctrl+B u: the board wipes its scribbles. */
     var boardClears by mutableIntStateOf(0)
         private set
@@ -321,6 +348,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.DRAW_KEPT -> editor?.let { toggleKeptDrawing(it) }
                 ?: run { flash = "Zeichnungen zum Abfragen entstehen im Editor (Durchgehen oder Bearbeiten)." }
             Command.CLEAR -> if (drawModeOnScreen != null) clearBoard() else flash = "Wegwischen geht, sobald ein Brett zu sehen ist."
+            Command.COLORS -> colorsOpen = !colorsOpen
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
@@ -396,6 +424,25 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         prefs = Prefs.Config
     }
 
+    /** Set to scroll the configuration down to the keys; the page clears it once it is there. */
+    var showKeys by mutableStateOf(false)
+
+    /**
+     * Ctrl+B and a key without a command ([free], if it is one that can be given one): Ctrl+B
+     * navigates, so it goes to the configuration, at the keys, where it can get a command.
+     */
+    fun openKeys(free: Char?) {
+        showShortcuts = false
+        prefs = Prefs.Config
+        showKeys = true
+        val settings = library.settings
+        flash = if (free != null) {
+            "${settings.prefixLabel} $free ist noch frei – hier unter „Tastenkürzel“ kannst du es belegen."
+        } else {
+            "Kein Kürzel – hier die Tastenkürzel; ${settings.shortcutLabel(Command.SHORTCUTS)} zeigt alle."
+        }
+    }
+
     /** The help: the list of topics, or with [topic] its page. */
     fun openHelp(topic: HelpTopic? = null) {
         prefs = Prefs.Help(topic, fromConfig = prefs == Prefs.Config)
@@ -420,6 +467,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 settings = when (target) {
                     KeyTarget.Prefix -> lib.settings.copy(prefixKey = key.toString())
                     is KeyTarget.Of -> lib.settings.withKey(target.command, key)
+                    is KeyTarget.Draw -> lib.settings.withDrawKey(target.key, key)
                 },
             )
         }
@@ -427,7 +475,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun resetKeys() {
         keyCapture = null
-        updateLibrary { it.copy(settings = it.settings.copy(prefixKey = "b", keys = emptyMap())) }
+        updateLibrary { it.copy(settings = it.settings.copy(prefixKey = "b", keys = emptyMap(), drawKeys = emptyMap())) }
     }
 
     fun setTapZonesOn(on: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(tapZonesOn = on)) }
@@ -446,12 +494,22 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun setBoardTheme(theme: BoardTheme) = updateLibrary { it.copy(settings = it.settings.copy(boardTheme = theme.name)) }
 
-    /** Gives pen [index] (0 to 5) the color [ink]; what is drawn with it, saved drawings too, takes the new color. */
-    fun setPenInk(index: Int, ink: Ink) = updateLibrary { lib ->
-        lib.copy(settings = lib.settings.copy(pens = lib.settings.inks.mapIndexed { i, old -> if (i == index) ink else old }.map { it.name }))
+    /** The colors of the pens in a window of their own, over whatever is open (Ctrl+B k). */
+    var colorsOpen by mutableStateOf(false)
+
+    /** Gives pen [index] (0 to 5) the color [color]; what is drawn with it, saved drawings too, takes the new color. */
+    fun setPenColor(index: Int, color: PenColor) = updateLibrary { lib ->
+        lib.copy(settings = lib.settings.copy(pens = lib.settings.penColors.mapIndexed { i, old -> if (i == index) color else old }.map { it.saved }))
     }
 
-    fun resetPens() = updateLibrary { it.copy(settings = it.settings.copy(pens = Ink.DEFAULT.map { ink -> ink.name })) }
+    /** A color typed in, like "#7FFFD4" with the name "Aquamarin"; false if the code is not one. */
+    fun setPenHex(index: Int, code: String, name: String): Boolean {
+        val color = PenColor.parse(code.trim().substringBefore(' ')) ?: return false
+        setPenColor(index, if (name.isBlank()) color else color.copy(label = name.trim()))
+        return true
+    }
+
+    fun resetPens() = updateLibrary { it.copy(settings = it.settings.copy(pens = Ink.DEFAULT.map { c -> c.saved })) }
 
     /** Shown in the editor when it was opened on top of a puzzle. */
     private val backToPuzzle: String?
@@ -1136,8 +1194,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             check.correct -> Feedback("Zeichnung richtig.", FeedbackTone.GOOD)
             else -> Feedback(
                 listOfNotNull(
-                    check.missing.takeIf { it.isNotEmpty() }?.let { "Es fehlt: " + it.joinToString(", ") { m -> m.describe(library.settings.inks) } + "." },
-                    check.extra.takeIf { it.isNotEmpty() }?.let { "Zu viel: " + it.joinToString(", ") { m -> m.describe(library.settings.inks) } + "." },
+                    check.missing.takeIf { it.isNotEmpty() }?.let { "Es fehlt: " + it.joinToString(", ") { m -> m.describe(library.settings.penColors) } + "." },
+                    check.extra.takeIf { it.isNotEmpty() }?.let { "Zu viel: " + it.joinToString(", ") { m -> m.describe(library.settings.penColors) } + "." },
                 ).joinToString(" "),
                 FeedbackTone.BAD,
             )

@@ -97,7 +97,8 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     SHORTCUTS('?', "Alle Kürzel anzeigen", 0),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
     DRAW_KEPT('n', "Zeichnung zum Abfragen an/aus (im Editor)", null),
-    CLEAR('u', "Gezeichnetes auf dem Brett wegwischen", null),
+    CLEAR('x', "Gezeichnetes auf dem Brett wegwischen", null),
+    COLORS('k', "Zeichenfarben einstellen", null),
     NEW_VARIANT('c', "Neue Variante", 2),
     PASTE_PGN('p', "PGN einfügen", 3),
     PASTE_FEN('f', "FEN einfügen", 4),
@@ -137,6 +138,38 @@ internal val OTHER_TOUCH = listOf(
     "2× tippen" to "auf eine freie Stelle: das Kürzel dieses Bereichs (siehe Einstellungen)",
 )
 
+/**
+ * Keys of their own while a board is drawing (drawing mode, a saved drawing, one from memory): a
+ * single key, without Ctrl+B. A focused text field still gets every letter typed into it.
+ */
+enum class DrawKey(val key: Char, val label: String) {
+    PEN_1('1', "Stift 1"),
+    PEN_2('2', "Stift 2"),
+    PEN_3('3', "Stift 3"),
+    PEN_4('4', "Stift 4"),
+    PEN_5('5', "Stift 5"),
+    PEN_6('6', "Stift 6"),
+    SHAPE('o', "Kreis oder ausgefülltes Feld"),
+    CLEAR('x', "Alles wegwischen"),
+    COLORS('k', "Zeichenfarben einstellen"),
+    DONE('u', "Zeichnen beenden"),
+    ;
+
+    /** The pen (0 to 5) of [PEN_1] to [PEN_6], else null. */
+    val pen: Int? get() = ordinal.takeIf { it < 6 }
+}
+
+/** The key [draw] has while drawing: its own unless changed in the configuration. */
+fun Settings.drawKeyOf(draw: DrawKey): Char = drawKeys[draw.name]?.firstOrNull() ?: draw.key
+
+/** [draw] on [key] from now on; a drawing key that had [key] gets the old key of [draw] in exchange. */
+fun Settings.withDrawKey(draw: DrawKey, key: Char): Settings {
+    val old = drawKeyOf(draw)
+    val other = DrawKey.entries.firstOrNull { it != draw && drawKeyOf(it) == key }
+    val changed = drawKeys + (draw.name to key.toString()) + (other?.let { mapOf(it.name to old.toString()) } ?: emptyMap())
+    return copy(drawKeys = changed.filter { (name, k) -> DrawKey.entries.firstOrNull { it.name == name }?.key?.toString() != k })
+}
+
 /** The key [command] has on the keyboard, after the prefix: its own unless changed in the configuration. */
 fun Settings.keyOf(command: Command): Char = keys[command.name]?.firstOrNull() ?: command.key
 
@@ -147,7 +180,8 @@ val Settings.prefixLabel: String get() = "Strg+" + prefixKey.uppercase()
 fun Settings.shortcutLabel(command: Command): String = "$prefixLabel ${keyOf(command)}"
 
 /** The keys differ from the defaults. */
-val Settings.keysChanged: Boolean get() = prefixKey != "b" || Command.entries.any { keyOf(it) != it.key }
+val Settings.keysChanged: Boolean
+    get() = prefixKey != "b" || Command.entries.any { keyOf(it) != it.key } || DrawKey.entries.any { drawKeyOf(it) != it.key }
 
 /** What a key can be set to: letters, digits and "?". */
 fun isShortcutKey(c: Char) = c in 'a'..'z' || c in '0'..'9' || c == '?'
@@ -169,6 +203,8 @@ sealed interface KeyTarget {
     data object Prefix : KeyTarget
 
     data class Of(val command: Command) : KeyTarget
+
+    data class Draw(val key: DrawKey) : KeyTarget
 }
 
 /** Letters and digits by their key, for when Ctrl hides the typed character. */
@@ -243,11 +279,22 @@ class ShortcutKeys(private val vm: AppViewModel) {
         val command = Command.entries.firstOrNull { settings.keyOf(it) == char }
             // The list stays reachable with ? and h even when its key was changed.
             ?: Command.SHORTCUTS.takeIf { char == '?' || char == 'h' || event.key == Key.Slash }
-        if (command != null) {
-            vm.run(command)
-        } else {
-            vm.flash = "${settings.prefixLabel}, dann ${settings.keyOf(Command.SHORTCUTS)} zeigt, welche Kürzel es gibt."
-        }
+        if (command != null) vm.run(command) else vm.openKeys(char)
+        return true
+    }
+
+    /**
+     * A single key while a board is drawing. Called after the focused element had its turn, so
+     * letters typed into a text field stay there.
+     */
+    fun handleDrawing(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown || !vm.penActive || vm.prefix || vm.keyCapture != null) return false
+        if (event.isCtrlPressed || event.isMetaPressed || event.isAltPressed) return false
+        if (event.key == Key.Escape) return vm.runDrawKey(DrawKey.DONE).let { true }
+        val char = charOf(event) ?: return false
+        val settings = vm.library.settings
+        val draw = DrawKey.entries.firstOrNull { settings.drawKeyOf(it) == char } ?: return false
+        vm.runDrawKey(draw)
         return true
     }
 
@@ -295,6 +342,7 @@ internal val Command.short: String get() = when (this) {
     Command.DRAW -> "Zeichnen"
     Command.DRAW_KEPT -> "Zeichnung"
     Command.CLEAR -> "Wegwischen"
+    Command.COLORS -> "Farben"
     Command.NEW_VARIANT -> "Variante"
     Command.PASTE_PGN -> "PGN"
     Command.PASTE_FEN -> "FEN"

@@ -10,6 +10,7 @@ import repertoire.core.Store
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
 import repertoire.ui.KeyTarget
+import repertoire.ui.Prefs
 import repertoire.ui.keyOf
 import repertoire.ui.keysChanged
 import repertoire.ui.prefixLabel
@@ -47,6 +48,47 @@ class ShortcutsTest {
     ).map(shortcutKeys::handle)
 
     private fun AppViewModel.ctrlB() = key(Key.B, '\u0002', ctrl = true)
+
+    private fun AppViewModel.drawKey(key: Key, char: Char, ctrl: Boolean = false) =
+        shortcutKeys.handleDrawing(KeyEvent(key, KeyEventType.KeyDown, char.code, isCtrlPressed = ctrl))
+
+    @Test
+    fun aFreeLetterAfterCtrlBOpensTheKeysInTheConfiguration() {
+        val vm = app()
+        vm.ctrlB()
+        assertEquals(listOf(true, true, true), vm.key(Key.Z, 'z'))
+        assertEquals(Prefs.Config, vm.prefs)
+        assertTrue(vm.showKeys)
+        assertTrue(vm.flash!!.contains("z ist noch frei"))
+        // Escape after Ctrl+B only cancels.
+        vm.prefs = null
+        vm.ctrlB()
+        vm.key(Key.Escape, '\u001b')
+        assertNull(vm.prefs)
+    }
+
+    @Test
+    fun whileDrawingASingleKeyIsACommand() {
+        val vm = app()
+        vm.newVariant()
+        // Not drawing: an "o" is just an "o".
+        assertFalse(vm.drawKey(Key.O, 'o'))
+        vm.run(Command.DRAW)
+        assertTrue(vm.drawKey(Key.O, 'o'))
+        assertTrue(vm.pen.value.field)
+        assertTrue(vm.drawKey(Key.Three, '3'))
+        assertEquals(2, vm.pen.value.color)
+        // With Ctrl it is not the drawing key, and a key without a meaning is left alone.
+        assertFalse(vm.drawKey(Key.O, 'o', ctrl = true))
+        assertFalse(vm.drawKey(Key.Q, 'q'))
+        // u ends drawing mode, as does Escape.
+        assertTrue(vm.drawKey(Key.U, 'u'))
+        assertFalse(vm.editor!!.drawMode.value)
+        vm.run(Command.DRAW)
+        assertTrue(vm.drawKey(Key.Escape, '\u001b'))
+        assertFalse(vm.editor!!.drawMode.value)
+        assertFalse(vm.drawKey(Key.O, 'o'))
+    }
 
     @Test
     fun prefixThenLetterRunsTheCommandAndTypesNothing() {

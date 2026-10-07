@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,12 +43,14 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.withTimeoutOrNull
 import repertoire.core.Mark
 import repertoire.core.Ink
+import repertoire.core.PenColor
 import repertoire.core.Move
 import repertoire.core.toggle
 import org.jetbrains.compose.resources.DrawableResource
@@ -98,11 +101,15 @@ val KEPT_RIGHT = MARK
 val KEPT_MISSING = Color(0xCCE68F00)
 val KEPT_EXTRA = Color(0xCC9A2020)
 
-/** The ink as it is drawn: a little see-through, as on lichess. */
-val Ink.paint: Color get() = Color(0xCC000000.toInt() or rgb)
+/** The color as it is drawn: a little see-through, as on lichess. */
+val PenColor.paint: Color get() = Color(0xCC000000.toInt() or rgb)
 
-/** The ink without transparency, for the buttons that pick it. */
-val Ink.solid: Color get() = Color(0xFF000000.toInt() or rgb)
+/** The color without transparency, for the buttons that pick it. */
+val PenColor.solid: Color get() = Color(0xFF000000.toInt() or rgb)
+
+/** Black or white, whichever can be read on top of this color. */
+val PenColor.onTop: Color
+    get() = if ((rgb shr 16 and 0xFF) * 299 + (rgb shr 8 and 0xFF) * 587 + (rgb and 0xFF) * 114 > 150_000) Color.Black else Color.White
 
 /** The six pens as set in the configuration. */
 val LocalPens = staticCompositionLocalOf { Ink.DEFAULT }
@@ -181,6 +188,11 @@ fun ChessBoard(
     val keepingNow by rememberUpdatedState(keeping)
     var pen by penState
 
+    // Drawing takes the keys (1–6, o, u, …), so a text field must not keep the focus and catch them.
+    val focusManager = LocalFocusManager.current
+    val drawingNow = drawMode || keeping != null
+    LaunchedEffect(drawingNow) { if (drawingNow) focusManager.clearFocus() }
+
     // Counting quick taps for the triple tap that switches drawing mode on and off.
     var taps by remember { mutableStateOf(0) }
     var lastTapUp by remember { mutableStateOf(0L) }
@@ -230,8 +242,10 @@ fun ChessBoard(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val sq = squareOf(down.position) ?: return@awaitEachGesture
-                    // Taps on the board are the board's, not a double tap into a screen zone.
+                    // Taps on the board are the board's, not a double tap into a screen zone,
+                    // and the keys are the board's again rather than a text field's.
                     down.consume()
+                    focusManager.clearFocus()
                     val before = drawn
 
                     /**
@@ -480,7 +494,7 @@ private fun BoxScope.DrawModeBar(square: Float, label: String, onClear: () -> Un
 
 /** The pen: six colors and circle or field, at the bottom of the board while drawing. ← → switch the color on a keyboard. */
 @Composable
-private fun BoxScope.PenBar(square: Float, pen: Pen, pens: List<Ink>, onPen: (Pen) -> Unit) {
+private fun BoxScope.PenBar(square: Float, pen: Pen, pens: List<PenColor>, onPen: (Pen) -> Unit) {
     val dot = (square * 0.4f).coerceIn(18f, 26f).dp
     Row(
         Modifier.align(Alignment.BottomCenter).padding(bottom = (square * 0.1f).dp)

@@ -7,6 +7,7 @@ import repertoire.core.FileStore
 import repertoire.core.Library
 import repertoire.core.Mark
 import repertoire.core.Ink
+import repertoire.core.PenColor
 import repertoire.core.Move
 import repertoire.core.Progress
 import repertoire.core.Store
@@ -14,6 +15,12 @@ import repertoire.core.parseSquare
 import repertoire.core.toggle
 import repertoire.ui.AppViewModel
 import repertoire.ui.Command
+import repertoire.ui.DrawKey
+import repertoire.ui.KeyTarget
+import repertoire.ui.Pen
+import repertoire.ui.drawKeyOf
+import repertoire.ui.keyOf
+import repertoire.ui.keysChanged
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -81,7 +88,7 @@ class DrawingTest {
         assertEquals("Pfeil e2→e4 (Rot)", second.describe())
         assertEquals("Feld d5 (Türkis)", field.describe())
         // What the pens are set to is what feedback names.
-        assertEquals("Pfeil e2→e4 (Gelb)", second.describe(listOf(Ink.GREEN, Ink.YELLOW) + Ink.DEFAULT.drop(2)))
+        assertEquals("Pfeil e2→e4 (Gelb)", second.describe(listOf(Ink.GREEN.pen, Ink.YELLOW.pen) + Ink.DEFAULT.drop(2)))
     }
 
     @Test
@@ -101,12 +108,97 @@ class DrawingTest {
     @Test
     fun thePensColorsAreSetInTheConfiguration() {
         val vm = app()
-        assertEquals(Ink.DEFAULT, vm.library.settings.inks)
-        vm.setPenInk(4, Ink.PINK)
-        assertEquals(Ink.PINK, vm.library.settings.inks[4])
-        assertEquals(Ink.PINK, app().library.settings.inks[4])
+        assertEquals(Ink.DEFAULT, vm.library.settings.penColors)
+        vm.setPenColor(4, Ink.PINK.pen)
+        assertEquals(Ink.PINK.pen, vm.library.settings.penColors[4])
+        assertEquals(Ink.PINK.pen, app().library.settings.penColors[4])
         vm.resetPens()
-        assertEquals(Ink.DEFAULT, vm.library.settings.inks)
+        assertEquals(Ink.DEFAULT, vm.library.settings.penColors)
+    }
+
+    @Test
+    fun anyColorCanBeTypedInAsACodeWithAName() {
+        val vm = app()
+        assertTrue(vm.setPenHex(2, "#7FFFD4", "Aquamarin"))
+        val aqua = PenColor(0x7FFFD4, "Aquamarin")
+        assertEquals(aqua, vm.library.settings.penColors[2])
+        assertEquals("#7FFFD4 Aquamarin", vm.library.settings.pens[2])
+        // Survives a restart, and names it in the feedback.
+        assertEquals(aqua, app().library.settings.penColors[2])
+        assertEquals("Pfeil e2→e4 (Aquamarin)", mark("3:e2e4").describe(vm.library.settings.penColors))
+        // Without a name it is called by its code; small letters and three digits work too.
+        assertTrue(vm.setPenHex(3, "ff1493", ""))
+        assertEquals(PenColor(0xFF1493, "#FF1493"), vm.library.settings.penColors[3])
+        assertEquals(PenColor(0x77FFDD, "#77FFDD"), PenColor.parse("#7FD"))
+        // Not a color: nothing changes.
+        assertFalse(vm.setPenHex(3, "#GGGGGG", "Quatsch"))
+        assertFalse(vm.setPenHex(3, "Aquamarin", ""))
+        assertEquals(PenColor(0xFF1493, "#FF1493"), vm.library.settings.penColors[3])
+    }
+
+    @Test
+    fun anInkTypedInAsACodeIsStillThatInk() {
+        assertEquals(Ink.RED.pen, PenColor.parse("#882020"))
+        assertEquals("RED", Ink.RED.pen.saved)
+        // Settings of 1.13.0 named the inks only.
+        assertEquals(listOf(Ink.PINK.pen) + Ink.DEFAULT.drop(1), Ink.pens(listOf("PINK")))
+        assertEquals(Ink.DEFAULT, Ink.pens(listOf("UNSINN", "")))
+    }
+
+    @Test
+    fun singleKeysWorkOnlyWhileDrawing() {
+        val vm = app()
+        val id = vm.withDrawings()
+        vm.editVariant(vm.library.variants.first { it.id == id })
+        // Not drawing: the keys mean nothing.
+        vm.runDrawKey(DrawKey.SHAPE)
+        vm.runDrawKey(DrawKey.PEN_3)
+        assertEquals(Pen(), vm.pen.value)
+
+        vm.run(Command.DRAW)
+        vm.runDrawKey(DrawKey.PEN_3)
+        assertEquals(2, vm.pen.value.color)
+        vm.runDrawKey(DrawKey.SHAPE)
+        assertTrue(vm.pen.value.field)
+        vm.runDrawKey(DrawKey.COLORS)
+        assertTrue(vm.colorsOpen)
+        vm.colorsOpen = false
+        vm.runDrawKey(DrawKey.DONE)
+        assertFalse(vm.editor!!.drawMode.value)
+
+        // A saved drawing: wiped with u, finished with m.
+        vm.run(Command.DRAW_KEPT)
+        vm.runDrawKey(DrawKey.CLEAR)
+        assertEquals(emptyList(), vm.editor!!.editedDrawing!!.marks)
+        vm.editorDrawingMark(mark("e4"))
+        vm.runDrawKey(DrawKey.DONE)
+        assertNull(vm.editor!!.drawingAt)
+    }
+
+    @Test
+    fun theDrawingKeysCanBeChangedAndSwapLikeTheOthers() {
+        val vm = app()
+        vm.setKey(KeyTarget.Draw(DrawKey.SHAPE), 'f')
+        assertEquals('f', vm.library.settings.drawKeyOf(DrawKey.SHAPE))
+        // Taken already: the two swap.
+        vm.setKey(KeyTarget.Draw(DrawKey.CLEAR), 'f')
+        assertEquals('f', vm.library.settings.drawKeyOf(DrawKey.CLEAR))
+        assertEquals('x', vm.library.settings.drawKeyOf(DrawKey.SHAPE))
+        // Ctrl+B keys are a different set: k stays with the colors there.
+        assertEquals('k', vm.library.settings.keyOf(Command.COLORS))
+        assertTrue(vm.library.settings.keysChanged)
+        vm.resetKeys()
+        assertEquals('o', vm.library.settings.drawKeyOf(DrawKey.SHAPE))
+        assertFalse(vm.library.settings.keysChanged)
+    }
+
+    @Test
+    fun ctrlBKOpensAndClosesTheColors() {
+        val vm = app()
+        vm.run(Command.COLORS)
+        assertTrue(vm.colorsOpen)
+        vm.run(Command.COLORS)
+        assertFalse(vm.colorsOpen)
     }
 
     @Test

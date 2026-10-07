@@ -21,6 +21,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import repertoire.core.PenColor
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,6 +39,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +47,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -53,6 +63,7 @@ import repertoire.core.Mark
 import repertoire.core.Position
 import repertoire.core.Settings
 import repertoire.core.parseSquare
+import kotlin.math.roundToInt
 
 /** The preferences screen: the configuration, or the help with an optional topic open. */
 sealed interface Prefs {
@@ -95,13 +106,19 @@ fun PreferencesScreen(vm: AppViewModel, prefs: Prefs, modifier: Modifier = Modif
         }
         // A fresh scroll position for every page, so a help page does not open halfway down.
         key(prefs) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            val scroll = rememberScrollState()
+            var viewport by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            // Scrolls so that [target] sits at the top of the page.
+            val scrollTo: suspend (LayoutCoordinates) -> Unit = { target ->
+                viewport?.let { v -> scroll.animateScrollTo(scroll.value + v.localPositionOf(target, Offset.Zero).y.roundToInt()) }
+            }
+            Column(Modifier.fillMaxSize().onGloballyPositioned { viewport = it }.verticalScroll(scroll)) {
                 // Lines and rows stay readable in a wide window instead of stretching across it.
                 Column(Modifier.widthIn(max = 720.dp).padding(24.dp)) {
                     when {
                         prefs is Prefs.Help && prefs.topic != null -> HelpPage(vm, prefs, touch)
                         prefs is Prefs.Help -> HelpIndex(vm, touch)
-                        else -> ConfigPage(vm, touch)
+                        else -> ConfigPage(vm, touch, scrollTo)
                     }
                     HorseClearance()
                 }
@@ -114,7 +131,7 @@ fun PreferencesScreen(vm: AppViewModel, prefs: Prefs, modifier: Modifier = Modif
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
+private fun ConfigPage(vm: AppViewModel, touch: Boolean, scrollTo: suspend (LayoutCoordinates) -> Unit) {
     val settings = vm.library.settings
     Section("Lernen", onHelp = { vm.openHelp(HelpTopic.LEARNING) }) {
         Text("Neue Varianten pro Tag")
@@ -160,7 +177,8 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        PenColors(vm, settings)
+        Text("Zeichenfarben" + if (LocalTouch.current) "" else " (${settings.shortcutLabel(Command.COLORS)})")
+        PenColors(vm)
     }
     if (touch) {
         val step = settings.holdStepMs
@@ -225,17 +243,17 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
             }
         }
     } else {
-        Section("Tastenkürzel", onHelp = { vm.openHelp(HelpTopic.KEYBOARD) }) {
-            Hint(
-                "Erst ${settings.prefixLabel}, dann die Taste. Zum Ändern auf eine Taste klicken und die neue drücken " +
-                    "(Esc bricht ab). Ist sie schon vergeben, tauschen die beiden.",
-            )
-            Spacer(Modifier.height(8.dp))
-            KeyRow("Präfix: Strg + …", settings.prefixKey.uppercase(), vm, KeyTarget.Prefix)
-            for (command in Command.entries) KeyRow(command.label, settings.keyOf(command).toString(), vm, KeyTarget.Of(command))
-            Spacer(Modifier.height(4.dp))
-            TextButton(onClick = vm::resetKeys, enabled = settings.keysChanged) { Text("Standard wiederherstellen") }
+        // Ctrl+B with a free key opens the configuration right here, once it is known where "here" is.
+        var keysAt by remember { mutableStateOf<LayoutCoordinates?>(null) }
+        val placed = keysAt != null
+        LaunchedEffect(vm.showKeys, placed) {
+            val at = keysAt
+            if (vm.showKeys && at != null) {
+                scrollTo(at)
+                vm.showKeys = false
+            }
         }
+        Column(Modifier.onGloballyPositioned { keysAt = it }) { KeySettings(vm, settings) }
     }
     Section("Daten", onHelp = { vm.openHelp(HelpTopic.DATA) }, last = true) {
         Hint("Gespeichert in: ${vm.dataLocation}")
@@ -252,6 +270,27 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
                 Text(it, style = MaterialTheme.typography.bodyMedium)
             }
         }
+    }
+}
+
+/** The keys: Ctrl+B and its letters, and the single keys while drawing. */
+@Composable
+private fun KeySettings(vm: AppViewModel, settings: Settings) {
+    Section("Tastenkürzel", onHelp = { vm.openHelp(HelpTopic.KEYBOARD) }) {
+        Hint(
+            "Erst ${settings.prefixLabel}, dann die Taste. Zum Ändern auf eine Taste klicken und die neue drücken " +
+                "(Esc bricht ab). Ist sie schon vergeben, tauschen die beiden. Ein freier Buchstabe nach ${settings.prefixLabel} führt hierher.",
+        )
+        Spacer(Modifier.height(8.dp))
+        KeyRow("Präfix: Strg + …", settings.prefixKey.uppercase(), vm, KeyTarget.Prefix)
+        for (command in Command.entries) KeyRow(command.label, settings.keyOf(command).toString(), vm, KeyTarget.Of(command))
+        Spacer(Modifier.height(12.dp))
+        Text("Beim Zeichnen (ohne ${settings.prefixLabel})")
+        Hint("Gelten nur, solange gezeichnet wird; dann ist jede Taste allein ein Befehl. Esc beendet das Zeichnen immer.")
+        Spacer(Modifier.height(4.dp))
+        for (draw in DrawKey.entries) KeyRow(draw.label, settings.drawKeyOf(draw).toString(), vm, KeyTarget.Draw(draw))
+        Spacer(Modifier.height(4.dp))
+        TextButton(onClick = vm::resetKeys, enabled = settings.keysChanged) { Text("Standard wiederherstellen") }
     }
 }
 
@@ -470,9 +509,22 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                 "beim Zeichnen liegt unten auf dem Brett eine Leiste: sechs Stifte, dazu Kreis oder ausgefülltes Feld " +
                     "für das, was ein Tipp auf ein Feld malt. Die Wahl gilt für alles Zeichnen, bis du sie änderst. " +
                     "Dasselbe mit einem anderen Stift färbt um." +
-                    (if (touch) "" else " Am Computer wechseln ← → den Stift und ↑ ↓ zwischen Kreis und Feld; Shift malt mit Stift 2, Alt mit 3, beide mit 4.") +
-                    " Welche Farbe jeder Stift hat, stellst du in der Konfiguration unter „Brett“ ein.",
+                    (if (touch) "" else " Am Computer: Shift malt mit Stift 2, Alt mit 3, beide mit 4.") +
+                    " Welche Farbe jeder Stift hat, stellst du " + (if (touch) "" else "mit ${settings.shortcutLabel(Command.COLORS)} oder ") +
+                    "in der Konfiguration unter „Brett“ ein: aus 16 Farben oder als eigenen Code mit Namen, z. B. #7FFFD4 „Aquamarin“.",
             )
+            if (!touch) {
+                SubHeading("Tasten beim Zeichnen")
+                Para(
+                    "Solange gezeichnet wird (Zeichenmodus, eine Zeichnung zum Abfragen oder aus dem Gedächtnis), haben einzelne Tasten " +
+                        "eine eigene Bedeutung – ohne ${settings.prefixLabel}. Steht der Cursor in einem Textfeld, landen Buchstaben dort; " +
+                        "ein Tipp aufs Brett holt die Tasten zurück.",
+                )
+                for (draw in DrawKey.entries) ShortcutRow(settings.drawKeyOf(draw).toString(), draw.label, null)
+                ShortcutRow("Esc", "Zeichnen beenden", null)
+                ShortcutRow("← →  /  ↑ ↓", "Stift wechseln  /  Kreis oder Feld", null)
+                Para("Belegen lassen sie sich in der Konfiguration unter „Tastenkürzel“.")
+            }
             Para("So Gezeichnetes ist nur für dich, für den Moment: es wird nicht gespeichert und nie abgefragt. Das gilt im Editor wie beim Üben.")
             Bullet(
                 "Wegwischen",
@@ -564,6 +616,10 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                     "Auch das B nach Strg lässt sich durch einen anderen Buchstaben ersetzen. " +
                     "Die Liste der Kürzel kommt immer auch mit ? oder h, falls man die eigene Belegung vergessen hat.",
             )
+            Para(
+                "${settings.prefixLabel} ist der Navigator zwischen den Modi: ein Buchstabe, der noch keinen Befehl hat, " +
+                    "öffnet die Konfiguration bei den Tastenkürzeln, wo du ihn belegen kannst.",
+            )
             ConfigButton(vm, "Tasten ändern")
             SubHeading("Weitere Tasten")
             for ((keys, label) in OTHER_KEYS) ShortcutRow(keys, label, null)
@@ -618,38 +674,38 @@ private fun Bullet(title: String, text: String) {
 }
 
 /**
- * The six pens: pick one, then its color on the little board of inks next to it. A board shows
- * all six as arrows and fields, as they will look.
+ * The six pens: pick one, then its color on the little board of inks, or type in any color as
+ * "#7FFFD4" with a name. A board shows all six as arrows and fields, as they will look. The same
+ * in the configuration and in its own window (Ctrl+B k).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PenColors(vm: AppViewModel, settings: Settings) {
-    val inks = settings.inks
+internal fun PenColors(vm: AppViewModel) {
+    val colors = vm.library.settings.penColors
     var chosen by remember { mutableStateOf(0) }
-    Text("Zeichenfarben")
     Text(
         "Sechs Stifte zum Zeichnen; beim Zeichnen wechseln ← → (am Handy die Leiste unten auf dem Brett). " +
-            "Tippe einen Stift an, dann seine Farbe. Schon Gezeichnetes nimmt die neue Farbe an.",
+            "Tippe einen Stift an, dann seine Farbe – aus dem Farbbrett oder als Code wie #7FFFD4. Schon Gezeichnetes nimmt die neue Farbe an.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        inks.forEachIndexed { i, ink ->
+        colors.forEachIndexed { i, color ->
             Box(
                 Modifier.size(36.dp)
                     .border(3.dp, if (i == chosen) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
                     .padding(4.dp)
-                    .background(ink.solid, RoundedCornerShape(5.dp))
+                    .background(color.solid, RoundedCornerShape(5.dp))
                     .clickable { chosen = i },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("${i + 1}", color = if (ink == Ink.WHITE || ink == Ink.YELLOW) Color.Black else Color.White, fontWeight = FontWeight.SemiBold)
+                Text("${i + 1}", color = color.onTop, fontWeight = FontWeight.SemiBold)
             }
         }
     }
     Spacer(Modifier.height(4.dp))
-    Text("Stift ${chosen + 1}: ${inks[chosen].label}", style = MaterialTheme.typography.bodyMedium)
+    Text("Stift ${chosen + 1}: ${colors[chosen].label} (${colors[chosen].hex})", style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // The inks laid out like a little board, four by four.
@@ -657,11 +713,11 @@ private fun PenColors(vm: AppViewModel, settings: Settings) {
             for (row in Ink.entries.chunked(4)) {
                 Row {
                     for (ink in row) {
-                        val current = ink == inks[chosen]
+                        val current = ink.pen == colors[chosen]
                         Box(
-                            Modifier.size(40.dp).background(ink.solid)
+                            Modifier.size(40.dp).background(ink.pen.solid)
                                 .border(if (current) 3.dp else 0.dp, if (current) Color.White else Color.Transparent)
-                                .clickable { vm.setPenInk(chosen, ink) },
+                                .clickable { vm.setPenColor(chosen, ink.pen) },
                         )
                     }
                 }
@@ -678,7 +734,62 @@ private fun PenColors(vm: AppViewModel, settings: Settings) {
             kept = PEN_PREVIEW.map(::KeptMark),
         )
     }
+    Spacer(Modifier.height(12.dp))
+    HexColor(vm, chosen, colors[chosen])
     TextButton(onClick = vm::resetPens) { Text("Standardfarben") }
+}
+
+/** Any color for pen [index], typed in as a code like "#7FFFD4", with a name for the feedback. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HexColor(vm: AppViewModel, index: Int, current: PenColor) {
+    // Starts with what the pen has, again whenever another pen is picked or the color changes.
+    var code by remember(index, current) { mutableStateOf(current.hex) }
+    var name by remember(index, current) { mutableStateOf(current.label) }
+    val typed = PenColor.parse(code)
+    Text("Eigene Farbe", style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(4.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(40.dp).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                .padding(3.dp).background(typed?.solid ?: Color.Transparent, RoundedCornerShape(4.dp)),
+        )
+        OutlinedTextField(
+            code, { code = it },
+            label = { Text("Code") }, placeholder = { Text("#7FFFD4") },
+            singleLine = true, isError = typed == null,
+            modifier = Modifier.width(130.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
+        )
+        OutlinedTextField(
+            name, { name = it },
+            label = { Text("Name") }, placeholder = { Text("Aquamarin") },
+            singleLine = true,
+            modifier = Modifier.width(170.dp).onPreviewKeyEvent(vm.shortcutKeys::handle),
+        )
+        Button(onClick = { vm.setPenHex(index, code, name) }, enabled = typed != null) { Text("Für Stift ${index + 1}") }
+    }
+    if (typed == null) {
+        Text(
+            "Kein Farbcode – sechs Zeichen 0–9 und A–F, z. B. #7FFFD4 (Aquamarin) oder #FF1493 (Pink).",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFE57373),
+        )
+    }
+}
+
+/** The pen colors in a window over whatever is open: Ctrl+B k. */
+@Composable
+internal fun PenColorsDialog(vm: AppViewModel) {
+    AlertDialog(
+        onDismissRequest = { vm.colorsOpen = false },
+        title = { Text("Zeichenfarben") },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { PenColors(vm) } },
+        confirmButton = { Button(onClick = { vm.colorsOpen = false }) { Text("Fertig") } },
+    )
 }
 
 /** One arrow and one field per pen, on the files a to f. */

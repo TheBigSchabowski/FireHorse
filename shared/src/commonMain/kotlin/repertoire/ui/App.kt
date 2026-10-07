@@ -24,7 +24,7 @@ fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false)
         CompositionLocalProvider(
             LocalTouch provides touch,
             LocalBoardTheme provides BoardTheme.named(vm.library.settings.boardTheme),
-            LocalPens provides vm.library.settings.inks,
+            LocalPens provides vm.library.settings.penColors,
         ) {
             Surface(modifier = Modifier.fillMaxSize()) {
                 // Double taps on a free spot run the shortcut of that part of the screen.
@@ -35,6 +35,7 @@ fun App(vm: AppViewModel, modifier: Modifier = Modifier, touch: Boolean = false)
                     val prefs = vm.prefs
                     vm.paste?.let { PasteDialog(vm, it) }
                     vm.naming?.let { PlaylistNameDialog(vm, it) }
+                    if (vm.colorsOpen) PenColorsDialog(vm)
                     when {
                         // Preferences and help go on top of everything, which is still there afterwards.
                         prefs != null -> PreferencesScreen(vm, prefs)
