@@ -1,6 +1,13 @@
 package repertoire.ui
 
 import androidx.compose.foundation.Canvas
+import kotlinx.coroutines.launch
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,6 +53,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
@@ -95,17 +103,18 @@ fun formatSeconds(ms: Long): String {
  */
 enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     SHORTCUTS('?', "Alle Kürzel anzeigen", 0),
+    // The ones needed most lie on the bottom row of the keyboard: y x c v b n m
+    NEW_VARIANT('c', "Neue Variante", 2),
+    PASTE_PGN('x', "PGN einfügen", 3),
+    COPY_PGN('v', "PGN bis zur Stellung kopieren", null),
+    COPY_FEN('y', "FEN der Stellung kopieren", null),
+    PASTE_FEN('f', "FEN einfügen", 4),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
     DRAW_KEPT('n', "Zeichnung zum Abfragen an/aus (im Editor)", null),
-    CLEAR('x', "Gezeichnetes auf dem Brett wegwischen", null),
+    CLEAR('w', "Gezeichnetes auf dem Brett wegwischen", null),
     COLORS('k', "Zeichenfarben einstellen", null),
-    NEW_VARIANT('c', "Neue Variante", 2),
-    PASTE_PGN('p', "PGN einfügen", 3),
-    PASTE_FEN('f', "FEN einfügen", 4),
-    COPY_FEN('2', "FEN der Stellung kopieren", null),
-    COPY_PGN('3', "PGN bis zur Stellung kopieren", null),
     PLAY('a', "Variante abspielen / anhalten", null),
-    SETTINGS('s', "Einstellungen und Hilfe", null),
+    SETTINGS('b', "Einstellungen und Tastenkürzel", null),
     ;
 
     companion object {
@@ -123,6 +132,9 @@ internal val OTHER_KEYS = listOf(
     "Cmd/Strg+T" to "Theorie öffnen (beim Eingeben einer Variante)",
     "← / →" to "Züge der Variante durchgehen; beim Zeichnen: Farbe wechseln",
     "↑ / ↓" to "beim Zeichnen: Kreis oder ausgefülltes Feld",
+    "Strg+N, dann 1–9" to "„Playlist lernen“ der 1., 2., 3. … Eröffnung auf der Startseite (nicht in einem Textfeld)",
+    "Shift+S" to "diese Liste öffnen und schließen (nicht in einem Textfeld); darin blättern ↑ ↓ und ← →",
+    "Shift+A" to "Zeichnungen auf dem Brett aus- und wieder einblenden (nicht in einem Textfeld)",
     "Cmd/Strg+Shift+C" to "Auswahl in der Theorie zur Lücke machen",
     "8 + Tab" to "„@8. Ng4“ in der Theorie ergänzen, nochmal Tab für Schwarz",
     "Enter" to "Lücken prüfen, dann „Gut“ / „Weiter“",
@@ -265,8 +277,18 @@ class ShortcutKeys(private val vm: AppViewModel) {
             return true
         }
 
-        if (KEY_CHARS[event.key] == settings.prefixKey.firstOrNull() && event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
-            vm.prefix = !vm.prefix
+        // After Ctrl+N: a digit picks the opening, any other key just ends it.
+        if (vm.picking && event.key !in MODIFIERS) {
+            vm.picking = false
+            swallow = event.key
+            val digit = charOf(event)?.takeIf { it in '1'..'9' }
+            if (digit != null) vm.learnOpeningAt(digit - '0')
+            return true
+        }
+
+        // With Ctrl still held, Ctrl+B Ctrl+B is the same as Ctrl+B b.
+        if (!vm.prefix && KEY_CHARS[event.key] == settings.prefixKey.firstOrNull() && event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+            vm.prefix = true
             swallow = event.key
             return true
         }
@@ -279,7 +301,7 @@ class ShortcutKeys(private val vm: AppViewModel) {
         val command = Command.entries.firstOrNull { settings.keyOf(it) == char }
             // The list stays reachable with ? and h even when its key was changed.
             ?: Command.SHORTCUTS.takeIf { char == '?' || char == 'h' || event.key == Key.Slash }
-        if (command != null) vm.run(command) else vm.openKeys(char)
+        if (command != null) vm.run(command, fromKeyboard = true) else vm.openKeys(char)
         return true
     }
 
@@ -295,6 +317,28 @@ class ShortcutKeys(private val vm: AppViewModel) {
         val settings = vm.library.settings
         val draw = DrawKey.entries.firstOrNull { settings.drawKeyOf(it) == char } ?: return false
         vm.runDrawKey(draw)
+        return true
+    }
+
+    /**
+     * Shift+A: the drawings on the board out of sight and back; Shift+S: the list of all shortcuts;
+     * Ctrl+N: pick an opening by its number. Called after the focused element had its turn, so a
+     * capital letter typed into a text field stays there.
+     */
+    fun handleDirect(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown || vm.prefix || vm.keyCapture != null) return false
+        if (event.isMetaPressed || event.isAltPressed) return false
+        when {
+            event.isCtrlPressed && !event.isShiftPressed && event.key == Key.N -> {
+                vm.showShortcuts = false
+                vm.picking = true
+            }
+            event.isCtrlPressed || !event.isShiftPressed -> return false
+            event.key == Key.A -> vm.toggleDrawingsHidden()
+            event.key == Key.S -> vm.run(Command.SHORTCUTS)
+            else -> return false
+        }
+        swallow = event.key
         return true
     }
 
@@ -322,6 +366,12 @@ fun BoxScope.ShortcutOverlay(vm: AppViewModel) {
             }
             Pill(text)
             Spacer(Modifier.height(8.dp))
+        }
+        if (vm.picking) {
+            val openings = vm.library.groups().take(9).mapIndexed { i, g -> "${i + 1} ${g.opening}" }
+            Pill(
+                if (openings.isEmpty()) "Strg+N …   noch keine Eröffnung" else "Strg+N …   Playlist lernen:   " + openings.joinToString("  ·  "),
+            )
         }
         if (vm.prefix) {
             val settings = vm.library.settings
@@ -365,11 +415,34 @@ private fun Pill(text: String) {
 /** Every shortcut; the commands can also be clicked, which is how they are found on a phone. */
 @Composable
 private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
         onDismissRequest = { vm.showShortcuts = false },
         title = { Text(if (touch) "Das Pferd" else "Tastenkürzel") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            // The list has the keys: ↑ ↓ scroll a bit, ← → and Page Up/Down a page, Shift+S closes it again.
+            Column(
+                Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val page = scroll.viewportSize * 0.8f
+                    val by = when (event.key) {
+                        Key.DirectionDown -> 120f
+                        Key.DirectionUp -> -120f
+                        Key.DirectionRight, Key.PageDown -> page
+                        Key.DirectionLeft, Key.PageUp -> -page
+                        else -> null
+                    }
+                    when {
+                        by != null -> scope.launch { scroll.animateScrollBy(by) }.let { true }
+                        event.key == Key.S && event.isShiftPressed -> true.also { vm.showShortcuts = false }
+                        event.key == Key.Escape -> true.also { vm.showShortcuts = false }
+                        else -> false
+                    }
+                }.verticalScroll(scroll),
+            ) {
                 Text(
                     if (touch) {
                         "Kurz tippen öffnet diese Liste, gedrückt halten wählt nach der Zeit – beim Halten steht daneben, was beim Loslassen passiert. Wegziehen bricht ab. " +

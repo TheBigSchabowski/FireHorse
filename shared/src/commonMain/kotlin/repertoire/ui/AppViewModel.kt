@@ -234,7 +234,7 @@ class PlaylistNaming(val playlistId: String?, name: String = "") {
 
 /** The "PGN/FEN einfügen" dialog: paste the text, read it, then carry on in the editor. */
 class PasteState(
-    /** Only for the title and example: what was asked for with Ctrl+B p / f; both are read either way. */
+    /** Only for the title and example: what was asked for with Ctrl+B x / f; both are read either way. */
     val kind: Command? = null,
 ) {
     var text by mutableStateOf("")
@@ -266,6 +266,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     var showShortcuts by mutableStateOf(false)
 
+    /** Ctrl+N was pressed; a digit picks the opening whose playlist is learned. */
+    var picking by mutableStateOf(false)
+
     /** A short note that disappears by itself, e.g. why a shortcut did nothing. */
     var flash by mutableStateOf<String?>(null)
 
@@ -273,6 +276,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     private val drawModeOnScreen get() = editor?.drawMode ?: session?.takeIf { it.attempt != null }?.drawMode
 
     val drawMode: Boolean get() = drawModeOnScreen?.value == true
+
+    /**
+     * Shift+A: what is drawn on the board is out of sight (kept, not wiped) until the same again,
+     * or until something is drawn: the board shows it all again then.
+     */
+    val drawingsHidden = mutableStateOf(false)
 
     /** Color and shape to draw with, the same on every board until changed. */
     val pen = mutableStateOf(Pen())
@@ -322,7 +331,19 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         }
     }
 
-    /** Bumped by Ctrl+B u: the board wipes its scribbles. */
+    /** Shift+A: the drawings on the board out of sight, or back again. */
+    fun toggleDrawingsHidden() {
+        flash = when {
+            drawModeOnScreen == null -> "Ausblenden geht, sobald ein Brett zu sehen ist."
+            penActive -> "Beim Zeichnen bleibt alles zu sehen."
+            else -> {
+                drawingsHidden.value = !drawingsHidden.value
+                if (drawingsHidden.value) "Zeichnungen ausgeblendet – Shift+A zeigt sie wieder." else "Zeichnungen wieder zu sehen."
+            }
+        }
+    }
+
+    /** Bumped by Ctrl+B w: the board wipes its scribbles. */
     var boardClears by mutableIntStateOf(0)
         private set
 
@@ -330,8 +351,11 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     private val editorInUse: Boolean
         get() = editor?.let { it.moves.isNotEmpty() || it.name.isNotBlank() || it.theory.text.isNotBlank() } == true
 
-    /** Runs a shortcut. It works on every screen; a puzzle stays open underneath the new variant. */
-    fun run(command: Command) {
+    /**
+     * Runs a shortcut. It works on every screen; a puzzle stays open underneath the new variant.
+     * [fromKeyboard]: by Ctrl+B, so the settings open at the keys.
+     */
+    fun run(command: Command, fromKeyboard: Boolean = false) {
         prefix = false
         if (command == Command.SHORTCUTS) {
             showShortcuts = !showShortcuts
@@ -342,7 +366,12 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         if (command != Command.SETTINGS) prefs = null
         when (command) {
             Command.SHORTCUTS -> Unit
-            Command.SETTINGS -> prefs = if (prefs == null) Prefs.Config else null
+            Command.SETTINGS -> if (prefs == null) {
+                prefs = Prefs.Config
+                showKeys = fromKeyboard
+            } else {
+                prefs = null
+            }
             Command.DRAW -> drawModeOnScreen?.let { it.value = !it.value }
                 ?: run { flash = "Zeichnen geht, sobald ein Brett zu sehen ist." }
             Command.DRAW_KEPT -> editor?.let { toggleKeptDrawing(it) }
@@ -385,7 +414,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         }
     }
 
-    /** Ctrl+B 2 / 3: the FEN of the board, or the PGN of the moves that led there, on the clipboard. */
+    /** Ctrl+B y / v: the FEN of the board, or the PGN of the moves that led there, on the clipboard. */
     private fun copyBoard(command: Command) {
         val line = boardLine()
         val copy = copyToClipboard
@@ -652,7 +681,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     // ---- Saved drawings ------------------------------------------------------------------
 
     /**
-     * Ctrl+B u: wipes what is drawn on the board right now, like „Löschen“ in its bar: the scribbles,
+     * Ctrl+B w: wipes what is drawn on the board right now, like „Löschen“ in its bar: the scribbles,
      * and the drawing being drawn into (a saved one in the editor, one from memory in a quiz). Saved
      * drawings that are only shown stay.
      */
@@ -859,6 +888,26 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             return
         }
         editVariant(v, fromStart = true, play = play, playlist = p)
+    }
+
+    /**
+     * Ctrl+N and [number]: „Playlist lernen“ of the opening at that place on the home screen, counted
+     * from 1 as listed there (pinned ones first). Works from any screen; a changed variant in the
+     * editor is not thrown away.
+     */
+    fun learnOpeningAt(number: Int) {
+        val group = library.groups().getOrNull(number - 1)
+        when {
+            group == null -> flash = "Keine Eröffnung Nummer $number."
+            editorChanged() && editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
+            else -> {
+                editor = null
+                paste = null
+                prefs = null
+                showShortcuts = false
+                learnPlaylist(group.opening)
+            }
+        }
     }
 
     /**

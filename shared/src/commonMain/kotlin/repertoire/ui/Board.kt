@@ -171,8 +171,10 @@ fun ChessBoard(
     keeping: Keeping? = null,
     /** Passed in so that the color and shape stay the same on every board. */
     penState: MutableState<Pen> = remember { mutableStateOf(Pen()) },
-    /** A new value wipes the scribbles (Ctrl+B u). */
+    /** A new value wipes the scribbles (Ctrl+B w). */
     clears: Int = 0,
+    /** Everything drawn is out of sight while true (Shift+A); drawing anything shows it again. */
+    hiddenState: MutableState<Boolean> = remember { mutableStateOf(false) },
 ) {
     val theme = LocalBoardTheme.current
     val pens = LocalPens.current
@@ -187,11 +189,18 @@ fun ChessBoard(
     // Read inside the gestures, which outlive a recomposition.
     val keepingNow by rememberUpdatedState(keeping)
     var pen by penState
+    var hidden by hiddenState
 
     // Drawing takes the keys (1–6, o, u, …), so a text field must not keep the focus and catch them.
     val focusManager = LocalFocusManager.current
     val drawingNow = drawMode || keeping != null
-    LaunchedEffect(drawingNow) { if (drawingNow) focusManager.clearFocus() }
+    // Drawing on a board whose drawings are hidden: they come back, so nothing is drawn blind.
+    LaunchedEffect(drawingNow) {
+        if (drawingNow) {
+            focusManager.clearFocus()
+            hidden = false
+        }
+    }
 
     // Counting quick taps for the triple tap that switches drawing mode on and off.
     var taps by remember { mutableStateOf(0) }
@@ -232,7 +241,7 @@ fun ChessBoard(
         val targets = (dragFrom ?: selected)?.let { from -> movesFrom(from).map { it.to }.toSet() } ?: emptySet()
 
         // Everything drawn, with its color; filled fields go under the pieces, the rest on top.
-        val marked = kept.map { it.mark to (it.color ?: pens[it.mark.color].paint) } +
+        val marked = if (hidden) emptyList<Pair<Mark, Color>>() else kept.map { it.mark to (it.color ?: pens[it.mark.color].paint) } +
             (drawn + listOfNotNull(drawing)).map { it to pens[it.color].paint }
         val fields = marked.filter { it.first.field }.associate { (mark, color) -> mark.from to color.copy(alpha = color.alpha * 0.7f) }
         val lines = marked.filterNot { it.first.field }
@@ -283,6 +292,7 @@ fun ChessBoard(
                             else -> pen.color
                         }
                         fun markTo(to: Int) = Mark(sq, to, color, field = pen.field && to == sq)
+                        hidden = false
                         drawing = markTo(sq)
                         while (true) {
                             val event = awaitPointerEvent()

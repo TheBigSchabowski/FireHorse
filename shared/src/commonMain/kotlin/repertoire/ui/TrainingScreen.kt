@@ -123,6 +123,7 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
                     },
                     penState = vm.pen,
                     clears = vm.boardClears,
+                    hiddenState = vm.drawingsHidden,
                     keeping = if (preview == null && drawing != null && check == null) {
                         Keeping("✎ Aus dem Gedächtnis", vm::drawingMark, vm::clearDrawingInput)
                     } else {

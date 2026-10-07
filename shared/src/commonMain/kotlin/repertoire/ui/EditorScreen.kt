@@ -69,6 +69,9 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 TextButton(onClick = { vm.playlistStep(1) }, enabled = !playlist.last) { Text("Nächste →") }
             }
         }
+        if (vm.drawingsHidden.value) {
+            TextButton(onClick = { vm.drawingsHidden.value = false }) { Text("Zeichnungen ausgeblendet – wieder zeigen") }
+        }
         Spacer(Modifier.height(12.dp))
         val edited = e.editedDrawing
         BoardWithPanel(
@@ -86,6 +89,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                     kept = (edited?.marks ?: e.drawingsHere.flatMap { it.marks }).map(::KeptMark),
                     penState = vm.pen,
                     clears = vm.boardClears,
+                    hiddenState = vm.drawingsHidden,
                     keeping = edited?.let {
                         Keeping("✎ Zum Abfragen", vm::editorDrawingMark, vm::editorClearDrawing, vm::editorFinishDrawing)
                     },

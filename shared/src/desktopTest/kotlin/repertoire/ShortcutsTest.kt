@@ -95,8 +95,8 @@ class ShortcutsTest {
         val vm = app()
         assertEquals(listOf(true, true, true), vm.ctrlB())
         assertTrue(vm.prefix)
-        // All three events of the "p" are swallowed, so no text field gets the letter.
-        assertEquals(listOf(true, true, true), vm.key(Key.P, 'p'))
+        // All three events of the "x" are swallowed, so no text field gets the letter.
+        assertEquals(listOf(true, true, true), vm.key(Key.X, 'x'))
         assertFalse(vm.prefix)
         assertEquals(Command.PASTE_PGN, vm.paste?.kind)
         // The next letter is typed normally again.
@@ -106,7 +106,7 @@ class ShortcutsTest {
     @Test
     fun lettersWithoutPrefixAreLeftAlone() {
         val vm = app()
-        assertEquals(listOf(false, false, false), vm.key(Key.P, 'p'))
+        assertEquals(listOf(false, false, false), vm.key(Key.X, 'x'))
         assertNull(vm.paste)
     }
 
@@ -231,9 +231,9 @@ class ShortcutsTest {
         vm.key(Key.G, 'g')
         assertEquals(Command.PASTE_PGN, vm.paste?.kind)
         vm.cancelPaste()
-        // p is free now.
+        // x is free now.
         vm.ctrlB()
-        vm.key(Key.P, 'p')
+        vm.key(Key.X, 'x')
         assertNull(vm.paste)
         assertNotNull(vm.flash)
     }
@@ -244,9 +244,9 @@ class ShortcutsTest {
         vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'f')
         val settings = vm.library.settings
         assertEquals('f', settings.keyOf(Command.PASTE_PGN))
-        assertEquals('p', settings.keyOf(Command.PASTE_FEN))
+        assertEquals('x', settings.keyOf(Command.PASTE_FEN))
         // Back to its own key: nothing is stored as changed any more.
-        vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'p')
+        vm.setKey(KeyTarget.Of(Command.PASTE_PGN), 'x')
         assertEquals(emptyMap(), vm.library.settings.keys)
         assertFalse(vm.library.settings.keysChanged)
     }
@@ -301,10 +301,10 @@ class ShortcutsTest {
         assertTrue(copied.isEmpty(), "ohne Zug kein PGN")
         for (uci in listOf("e2e4", "c7c5", "g1f3")) vm.editorPlay(repertoire.core.Move.fromUci(uci))
         vm.ctrlB()
-        vm.key(Key.Three, '3')
+        vm.key(Key.V, 'v')
         assertEquals("1. e4 c5 2. Nf3", copied.last())
         vm.ctrlB()
-        vm.key(Key.Two, '2')
+        vm.key(Key.Y, 'y')
         assertEquals("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", copied.last())
 
         // Half-way through the line it is the position on the board that counts.
@@ -313,6 +313,105 @@ class ShortcutsTest {
         assertEquals("1. e4 c5", copied.last())
         vm.run(Command.COPY_FEN)
         assertEquals("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2", copied.last())
+    }
+
+    @Test
+    fun ctrlHeldStillPicksTheCommand() {
+        val vm = app()
+        val copied = mutableListOf<String>()
+        vm.copyToClipboard = { copied += it }
+        vm.newVariant()
+        vm.editorPlay(repertoire.core.Move.fromUci("e2e4"))
+        vm.ctrlB()
+        vm.key(Key.V, '\u0016', ctrl = true)
+        assertEquals("1. e4", copied.last())
+        assertFalse(vm.prefix)
+    }
+
+    @Test
+    fun ctrlBBOpensTheSettingsAtTheKeys() {
+        val vm = app()
+        vm.ctrlB()
+        vm.key(Key.B, 'b')
+        assertEquals(Prefs.Config, vm.prefs)
+        assertTrue(vm.showKeys)
+        // Again, with Ctrl still held: closes them.
+        vm.ctrlB()
+        assertTrue(vm.prefix)
+        vm.ctrlB()
+        assertFalse(vm.prefix)
+        assertNull(vm.prefs)
+        // From the list or a phone they open at the top.
+        vm.showKeys = false
+        vm.run(Command.SETTINGS)
+        assertEquals(Prefs.Config, vm.prefs)
+        assertFalse(vm.showKeys)
+    }
+
+    @Test
+    fun shiftAHidesTheDrawingsAndShowsThemAgain() {
+        val vm = app()
+        val shiftA = KeyEvent(Key.A, KeyEventType.KeyDown, 'A'.code, isShiftPressed = true)
+        assertTrue(vm.shortcutKeys.handleDirect(shiftA))
+        assertFalse(vm.drawingsHidden.value, "ohne Brett nichts auszublenden")
+        vm.newVariant()
+        assertTrue(vm.shortcutKeys.handleDirect(shiftA))
+        assertTrue(vm.drawingsHidden.value)
+        assertTrue(vm.shortcutKeys.handleDirect(shiftA))
+        assertFalse(vm.drawingsHidden.value)
+        // A plain a, or Shift+A after Ctrl+B, is something else.
+        assertFalse(vm.shortcutKeys.handleDirect(KeyEvent(Key.A, KeyEventType.KeyDown, 'a'.code)))
+        vm.ctrlB()
+        assertFalse(vm.shortcutKeys.handleDirect(shiftA))
+        vm.key(Key.Escape, '\u001b')
+        // While drawing everything stays in sight.
+        vm.run(Command.DRAW)
+        vm.shortcutKeys.handleDirect(shiftA)
+        assertFalse(vm.drawingsHidden.value)
+    }
+
+    @Test
+    fun shiftSOpensTheList() {
+        val vm = app()
+        assertTrue(vm.shortcutKeys.handleDirect(KeyEvent(Key.S, KeyEventType.KeyDown, 'S'.code, isShiftPressed = true)))
+        assertTrue(vm.showShortcuts)
+        assertFalse(vm.shortcutKeys.handleDirect(KeyEvent(Key.S, KeyEventType.KeyDown, 's'.code)))
+    }
+
+    private fun AppViewModel.addVariant(opening: String, vararg sans: String) {
+        newVariant()
+        editor!!.name = sans.joinToString(" ")
+        editor!!.opening = opening
+        var p = Position.START
+        for (san in sans) {
+            val move = p.parseSan(san)!!
+            editorPlay(move)
+            p = p.play(move)
+        }
+        saveEditor()
+    }
+
+    @Test
+    fun ctrlNThenADigitLearnsThatOpening() {
+        val vm = app()
+        vm.addVariant("Sizilianisch", "e4", "c5")
+        vm.addVariant("Französisch", "e4", "e6")
+        val ctrlN = KeyEvent(Key.N, KeyEventType.KeyDown, 0x0e, isCtrlPressed = true)
+        assertTrue(vm.shortcutKeys.handleDirect(ctrlN))
+        assertTrue(vm.picking)
+        // Alphabetical on the home screen: 1 Französisch, 2 Sizilianisch.
+        assertEquals(listOf(true, true, true), vm.key(Key.Two, '2'))
+        assertFalse(vm.picking)
+        val session = assertNotNull(vm.session)
+        assertEquals("Sizilianisch", session.attempt!!.quiz.variant.opening)
+
+        // Any other key just ends it; a number without an opening says so.
+        vm.shortcutKeys.handleDirect(ctrlN)
+        vm.key(Key.E, 'e')
+        assertFalse(vm.picking)
+        vm.shortcutKeys.handleDirect(ctrlN)
+        vm.key(Key.Five, '5')
+        assertTrue(vm.flash!!.contains("5"))
     }
 
     @Test

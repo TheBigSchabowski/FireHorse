@@ -531,6 +531,14 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                 (if (touch) "das Kürzel „Wegwischen“" else settings.shortcutLabel(Command.CLEAR)) +
                     " nimmt sofort alles Gezeichnete vom Brett, wie „Löschen“ in der Leiste. Gespeicherte Zeichnungen, die nur angezeigt werden, bleiben.",
             )
+            if (!touch) {
+                Bullet(
+                    "Ausblenden",
+                    "Shift+A (ohne ${settings.prefixLabel}, nicht in einem Textfeld) zeigt das Brett ohne alles Gezeichnete, " +
+                        "auch ohne die Zeichnungen zum Abfragen; nochmal Shift+A zeigt es wieder. " +
+                        "Weg ist dabei nichts. Sobald du zeichnest, ist alles wieder zu sehen.",
+                )
+            }
             SubHeading("Zeichnungen zum Abfragen")
             Para(
                 "Im Editor (Durchgehen oder Bearbeiten) legt „+ Zeichnung hier“" + (if (touch) "" else " oder ${settings.shortcutLabel(Command.DRAW_KEPT)}") +
@@ -618,7 +626,10 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             )
             Para(
                 "${settings.prefixLabel} ist der Navigator zwischen den Modi: ein Buchstabe, der noch keinen Befehl hat, " +
-                    "öffnet die Konfiguration bei den Tastenkürzeln, wo du ihn belegen kannst.",
+                    "öffnet die Konfiguration bei den Tastenkürzeln, wo du ihn belegen kannst. " +
+                    "Die oft gebrauchten Befehle liegen in der unteren Reihe (y x c v b n m), nah an Strg und B. " +
+                    "Strg darf gedrückt bleiben: ${settings.prefixLabel} Strg+V ist dasselbe wie ${settings.prefixLabel} v, " +
+                    "zweimal ${settings.prefixLabel} also ${settings.prefixLabel} ${settings.prefixKey}.",
             )
             ConfigButton(vm, "Tasten ändern")
             SubHeading("Weitere Tasten")

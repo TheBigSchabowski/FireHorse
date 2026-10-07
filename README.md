@@ -104,7 +104,10 @@ installieren“ erlauben.
 
 ### Kürzel
 
-Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` zeigt die Liste aller Kürzel.
+Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` oder einfach `Shift+S` zeigt die Liste
+aller Kürzel; darin blättern ↑ ↓ (←/→ seitenweise), `Shift+S` oder `Esc` schließt sie wieder.
+`Strg+N` und dann eine Ziffer startet „Playlist lernen“ der Eröffnung an dieser Stelle der Startseite
+(`1` die erste, angepinnte zuerst, bis `9`); unten steht dabei, welche Nummer welche Eröffnung ist.
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
 Die Liste kommt immer auch mit `?` oder `h`. `Strg+B` ist der Navigator: ein Buchstabe, der noch
@@ -122,17 +125,23 @@ oder ganz ausschalten.
 | Computer | Handy | |
 |---|---|---|
 | `Strg+B ?` | antippen | Liste aller Kürzel (Einträge sind anklickbar) |
+| `Strg+B c` | 2 Schritte halten | Neue Variante |
+| `Strg+B x` | 3 Schritte halten | PGN einfügen |
+| `Strg+B v` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
+| `Strg+B y` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
+| `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
-| `Strg+B x` | Kürzel-Liste antippen | Gezeichnetes auf dem Brett sofort wegwischen |
+| `Strg+B w` | Kürzel-Liste antippen | Gezeichnetes auf dem Brett sofort wegwischen |
 | `Strg+B k` | Kürzel-Liste antippen | Zeichenfarben einstellen (auch eigene wie `#7FFFD4`) |
-| `Strg+B c` | 2 Schritte halten | Neue Variante |
-| `Strg+B p` | 3 Schritte halten | PGN einfügen |
-| `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B a` | Kürzel-Liste antippen | Variante abspielen / anhalten (im Editor) |
-| `Strg+B s` | Doppeltippen Mitte rechts | Einstellungen und Hilfe |
-| `Strg+B 2` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
-| `Strg+B 3` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
+| `Strg+B b` | Doppeltippen Mitte rechts | Einstellungen, am Computer gleich bei den Tastenkürzeln |
+
+Die oft gebrauchten Befehle liegen in der unteren Tastenreihe (`y x c v b n m`), nah an Strg und B.
+Strg darf dabei gedrückt bleiben: `Strg+B Strg+V` ist dasselbe wie `Strg+B v`.
+
+`Shift+A` (ohne `Strg+B`) blendet alles Gezeichnete auf dem Brett aus und wieder ein, auch die
+Zeichnungen zum Abfragen; verloren geht dabei nichts. In einem Textfeld bleibt es ein großes A.
 
 **Beim Zeichnen** (Zeichenmodus, Zeichnung zum Abfragen, Abfrage aus dem Gedächtnis) ist jede Taste
 allein ein Befehl, ohne `Strg+B`: `1`–`6` Stift wählen, `o` Kreis oder ausgefülltes Feld, `x` alles
