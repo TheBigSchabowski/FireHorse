@@ -108,7 +108,7 @@ fun TrainingScreen(vm: AppViewModel, session: TrainingSession, modifier: Modifie
             board = { modifier ->
                 ChessBoard(
                     position = shownPly?.let { variant.positions[it] } ?: attempt.position,
-                    whiteBottom = variant.playWhite,
+                    whiteBottom = variant.playWhite != session.flipped,
                     lastMove = if (shownPly != null) variant.moves.getOrNull(shownPly - 1)?.let(Move::fromUci) else attempt.lastMove,
                     marks = if (shownPly != null) emptyMap() else session.marks,
                     interactive = !attempt.finished && preview == null,

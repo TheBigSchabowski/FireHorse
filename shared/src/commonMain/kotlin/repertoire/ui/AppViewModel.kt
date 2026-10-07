@@ -88,6 +88,9 @@ class TrainingSession(
     /** Drawing mode of the board (three taps or Ctrl+B m); ends with the session. */
     val drawMode = mutableStateOf(false)
 
+    /** The board turned round with 8, until the next variant comes up. */
+    var flipped by mutableStateOf(false)
+
     /** Single moves do not ask the theory. */
     val gaps: List<TheoryPart.Gap>
         get() = attempt?.takeIf { !it.singleMove }?.quiz?.variant?.theory?.let(Cloze::gaps) ?: emptyList()
@@ -334,6 +337,22 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             e != null && e.editedDrawing != null -> editorFinishDrawing()
             e != null -> e.drawMode.value = false
             else -> session?.drawMode?.value = false
+        }
+    }
+
+    /** The editor's board turned round with 8: stays so for every variant until 8 again. */
+    var editorFlipped by mutableStateOf(false)
+
+    /**
+     * 8: turns the board on screen round. Only what is seen: the side the variant is played from
+     * stays. In the editor it stays turned; in a puzzle until the next variant.
+     */
+    fun flipBoard() {
+        val s = session
+        when {
+            editor != null -> editorFlipped = !editorFlipped
+            s?.attempt != null -> s.flipped = !s.flipped
+            else -> flash = "Drehen geht, sobald ein Brett zu sehen ist."
         }
     }
 
@@ -1144,7 +1163,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     private fun nextQuiz(s: TrainingSession) {
+        val before = s.attempt?.quiz?.variant?.id
         s.attempt = s.queue.removeFirstOrNull()?.attempt()
+        // A turned board stays turned for the same variant (again after a mistake), not for the next one.
+        if (s.attempt?.quiz?.variant?.id != before) s.flipped = false
         s.feedback = null
         s.marks = emptyMap()
         s.showTarget = false

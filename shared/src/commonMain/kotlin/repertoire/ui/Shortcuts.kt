@@ -148,6 +148,7 @@ internal val OTHER_KEYS = listOf(
     "↑ / ↓" to "beim Zeichnen: Kreis oder ausgefülltes Feld",
     "Strg+N, dann 1–9" to "„Playlist lernen“ der 1., 2., 3. … Eröffnung auf der Startseite (nicht in einem Textfeld)",
     "Shift+S" to "diese Liste öffnen und schließen (nicht in einem Textfeld); darin blättern ↑ ↓ und ← →",
+    "8" to "Brett drehen: im Editor bleibt es gedreht, beim Üben bis zur nächsten Variante (nicht in einem Textfeld)",
     "Shift+A" to "Zeichnungen auf dem Brett aus- und wieder einblenden (nicht in einem Textfeld)",
     "Cmd/Strg+Shift+C" to "Auswahl in der Theorie zur Lücke machen",
     "8 + Tab" to "„@8. Ng4“ in der Theorie ergänzen, nochmal Tab für Schwarz",
@@ -336,13 +337,16 @@ class ShortcutKeys(private val vm: AppViewModel) {
 
     /**
      * Shift+A: the drawings on the board out of sight and back; Shift+S: the list of all shortcuts;
-     * Ctrl+N: pick an opening by its number. Not while a text field has the focus: there a capital
+     * Ctrl+N: pick an opening by its number; 8: the board turned round. Not while a text field has the focus: there a capital
      * letter is just typed. (A text field does not take the key press itself, only what it types.)
      */
     fun handleDirect(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown || vm.prefix || vm.keyCapture != null || vm.typing) return false
         if (event.isMetaPressed || event.isAltPressed) return false
+        val plain = !event.isCtrlPressed && !event.isShiftPressed
         when {
+            // 8 turns the board round (Shift+8 is a bracket on a German keyboard, so without Shift).
+            plain && (event.key == Key.Eight || event.key == Key.NumPad8) -> vm.flipBoard()
             event.isCtrlPressed && !event.isShiftPressed && event.key == Key.N -> {
                 vm.showShortcuts = false
                 vm.picking = true

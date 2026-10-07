@@ -55,7 +55,7 @@ fun main() = application {
                 // While drawing, single keys have meanings of their own (1–6, o, u, k, m, Esc) …
                 viewModel.shortcutKeys.handleDrawing(event) -> true
                 // Shift+A hides the drawings on the board, Shift+S opens the list, Ctrl+N picks an opening,
-                // unless a text field took the key.
+                // 8 turns the board round; not while a text field has the focus.
                 viewModel.shortcutKeys.handleDirect(event) -> true
                 // … and ← → switch the pen, ↑ ↓ circle or field.
                 viewModel.penActive && event.key == Key.DirectionLeft -> viewModel.penStep(-1).let { true }

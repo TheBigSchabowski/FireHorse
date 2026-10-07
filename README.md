@@ -108,7 +108,9 @@ Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` oder einfa
 aller Kürzel; darin blättern ↑ ↓ (←/→ seitenweise), `Shift+S` oder `Esc` schließt sie wieder.
 `Strg+N` und dann eine Ziffer startet „Playlist lernen“ der Eröffnung an dieser Stelle der Startseite
 (`1` die erste, angepinnte zuerst, bis `9`); unten steht dabei, welche Nummer welche Eröffnung ist.
-`Shift+S`, `Shift+A` und `Strg+N` gelten nicht, solange der Cursor in einem Textfeld steht; dort wird getippt.
+`8` dreht das Brett: im Editor bleibt es gedreht, bis du wieder `8` drückst, beim Üben bis zur nächsten
+Variante. Gedreht wird nur die Ansicht, die Seite, die du spielst, bleibt.
+`Shift+S`, `Shift+A`, `Strg+N` und `8` gelten nicht, solange der Cursor in einem Textfeld steht; dort wird getippt.
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
 Die Liste kommt immer auch mit `?` oder `h`. `Strg+B` ist der Navigator: ein Buchstabe, der noch

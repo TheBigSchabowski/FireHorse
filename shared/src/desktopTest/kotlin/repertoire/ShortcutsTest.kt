@@ -447,6 +447,50 @@ class ShortcutsTest {
     }
 
     @Test
+    fun eightTurnsTheBoardInTheEditorForGoodAndInAPuzzleForThisVariant() {
+        val vm = app()
+        val eight = KeyEvent(Key.Eight, KeyEventType.KeyDown, '8'.code)
+        assertTrue(vm.shortcutKeys.handleDirect(eight))
+        assertNotNull(vm.flash, "ohne Brett nichts zu drehen")
+
+        // Two variants of one opening, so its playlist has a next one.
+        vm.addVariant("Sizilianisch", "e4", "c5")
+        vm.addVariant("Sizilianisch", "e4", "c5", "Nf3")
+        vm.editVariant(vm.library.variants.first())
+        vm.shortcutKeys.handleDirect(eight)
+        assertTrue(vm.editorFlipped)
+        // The side the variant is played from stays.
+        assertTrue(vm.editor!!.playWhite == vm.library.variants.first().playWhite)
+        vm.cancelEditor()
+        vm.editVariant(vm.library.variants.last())
+        assertTrue(vm.editorFlipped, "im Editor bleibt es gedreht")
+        vm.shortcutKeys.handleDirect(eight)
+        assertFalse(vm.editorFlipped)
+        vm.cancelEditor()
+
+        // Typing an 8 into a text field turns nothing.
+        vm.newVariant()
+        val field = Any()
+        vm.typingIn += field
+        assertFalse(vm.shortcutKeys.handleDirect(eight))
+        assertFalse(vm.editorFlipped)
+        vm.typingIn -= field
+        vm.cancelEditor()
+
+        vm.learnOpeningAt(1)
+        val session = vm.session!!
+        val first = session.attempt!!.quiz.variant.id
+        vm.shortcutKeys.handleDirect(eight)
+        assertTrue(session.flipped)
+        vm.restartCurrent()
+        assertTrue(session.flipped, "dieselbe Variante bleibt gedreht")
+        for (move in session.attempt!!.quiz.variant.moves) vm.submitMove(repertoire.core.Move.fromUci(move))
+        vm.confirm()
+        assertTrue(session.attempt!!.quiz.variant.id != first)
+        assertFalse(session.flipped, "die nächste Variante kommt wieder richtig herum")
+    }
+
+    @Test
     fun copiedPgnReadsBackFromASetUpPosition() {
         val fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
         val line = repertoire.core.Pgn.parse(repertoire.core.Pgn.export(fen, listOf("2. Nf3", "2... d6")))

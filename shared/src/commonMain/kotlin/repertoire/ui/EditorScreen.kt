@@ -78,7 +78,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             board = { modifier ->
                 ChessBoard(
                     position = position,
-                    whiteBottom = e.playWhite,
+                    whiteBottom = e.playWhite != vm.editorFlipped,
                     lastMove = e.shown.lastOrNull(),
                     marks = emptyMap(),
                     interactive = true,
