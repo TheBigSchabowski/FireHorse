@@ -24,7 +24,9 @@ import kotlinx.serialization.json.Json
  *
  * "id" and "progress" are optional; without an id a variant is always added as new. "startFen" only
  * appears for a variant that does not begin at the start of a game, and "moves" then counts from there.
- * "drawings" are the saved arrows and circles, e.g. `{"ply": 12, "marks": ["d5", "f3f5"], "question": "Plan?"}`.
+ * "drawings" are the saved arrows and circles after "ply" moves, e.g.
+ * `{"ply": 12, "marks": ["d5", "2:f3f5", "#e4"], "question": "Plan?"}`: a circle, an arrow with pen 2,
+ * a filled field; without a number it is pen 1.
  */
 @Serializable
 data class ExportFile(

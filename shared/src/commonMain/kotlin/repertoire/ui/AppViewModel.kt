@@ -12,6 +12,7 @@ import repertoire.core.DrawingCheck
 import repertoire.core.Exchange
 import repertoire.core.FilePicker
 import repertoire.core.Fsrs
+import repertoire.core.Ink
 import repertoire.core.Grade
 import repertoire.core.TheoryPart
 import repertoire.core.Library
@@ -275,6 +276,25 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** Color and shape to draw with, the same on every board until changed. */
     val pen = mutableStateOf(Pen())
 
+    /**
+     * A board is drawing right now: drawing mode, a saved drawing, or one from memory in a quiz.
+     * Then ← → switch the pen and ↑ ↓ circle or field, instead of stepping through the moves.
+     */
+    val penActive: Boolean
+        get() = editor?.let { it.drawMode.value || it.editedDrawing != null }
+            ?: session?.let { s -> s.attempt != null && (s.drawMode.value || (s.drawing != null && s.drawingCheck == null && s.preview == null)) }
+            ?: false
+
+    /** The next pen ([by] 1) or the one before (-1). */
+    fun penStep(by: Int) {
+        pen.value = pen.value.step(by)
+    }
+
+    /** Circle or filled field for a tap on a single square. */
+    fun penToggleField() {
+        pen.value = pen.value.copy(field = !pen.value.field)
+    }
+
     /** Bumped by Ctrl+B u: the board wipes its scribbles. */
     var boardClears by mutableIntStateOf(0)
         private set
@@ -425,6 +445,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     fun setHorseLeft(left: Boolean) = updateLibrary { it.copy(settings = it.settings.copy(horseLeft = left)) }
 
     fun setBoardTheme(theme: BoardTheme) = updateLibrary { it.copy(settings = it.settings.copy(boardTheme = theme.name)) }
+
+    /** Gives pen [index] (0 to 5) the color [ink]; what is drawn with it, saved drawings too, takes the new color. */
+    fun setPenInk(index: Int, ink: Ink) = updateLibrary { lib ->
+        lib.copy(settings = lib.settings.copy(pens = lib.settings.inks.mapIndexed { i, old -> if (i == index) ink else old }.map { it.name }))
+    }
+
+    fun resetPens() = updateLibrary { it.copy(settings = it.settings.copy(pens = Ink.DEFAULT.map { ink -> ink.name })) }
 
     /** Shown in the editor when it was opened on top of a puzzle. */
     private val backToPuzzle: String?
@@ -1109,8 +1136,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             check.correct -> Feedback("Zeichnung richtig.", FeedbackTone.GOOD)
             else -> Feedback(
                 listOfNotNull(
-                    check.missing.takeIf { it.isNotEmpty() }?.let { "Es fehlt: " + it.joinToString(", ") { m -> m.describe() } + "." },
-                    check.extra.takeIf { it.isNotEmpty() }?.let { "Zu viel: " + it.joinToString(", ") { m -> m.describe() } + "." },
+                    check.missing.takeIf { it.isNotEmpty() }?.let { "Es fehlt: " + it.joinToString(", ") { m -> m.describe(library.settings.inks) } + "." },
+                    check.extra.takeIf { it.isNotEmpty() }?.let { "Zu viel: " + it.joinToString(", ") { m -> m.describe(library.settings.inks) } + "." },
                 ).joinToString(" "),
                 FeedbackTone.BAD,
             )

@@ -32,7 +32,11 @@ data class Settings(
     val horseLeft: Boolean = false,
     /** Name of a `BoardTheme`. */
     val boardTheme: String = "classic",
-)
+    /** The [Ink] of each of the six pens to draw with, by name. */
+    val pens: List<String> = Ink.DEFAULT.map { it.name },
+) {
+    val inks: List<Ink> get() = Ink.pens(pens)
+}
 
 @Serializable
 data class Library(

@@ -82,14 +82,16 @@ installieren“ erlauben.
   zeigt den Modus an; jetzt kreist Antippen ein Feld ein (nochmal tippen nimmt es weg), Ziehen von
   Feld zu Feld malt einen Pfeil, und Züge sind gesperrt. „Löschen“ in der Leiste oben wischt alles
   weg, „Fertig“ oder nochmal dreimal tippen beendet den Modus. Gezeichnetes wird nicht gespeichert.
-  Unten auf dem Brett liegt dabei eine Leiste mit vier Farben (grün, rot, blau, gelb) und der Wahl
-  zwischen Kreis und ausgefülltem Feld. Am Computer malt Shift rot, Alt blau, beide gelb.
+  Unten auf dem Brett liegt dabei eine Leiste mit sechs Stiften und der Wahl zwischen Kreis und
+  ausgefülltem Feld. Am Computer wechseln ← → den Stift und ↑ ↓ zwischen Kreis und Feld; Shift malt
+  mit Stift 2, Alt mit 3, beide mit 4. Die Farbe jedes Stifts ist frei wählbar (Einstellungen →
+  Konfiguration → Brett → Zeichenfarben, 16 Farben); schon Gezeichnetes nimmt sie an.
 - **Zeichnungen zum Abfragen:** im Editor legt „+ Zeichnung hier“ (oder `Strg+B n`) an der Stellung auf dem Brett eine
   Zeichnung an, die mit der Variante gespeichert wird (blauer Rahmen: Antippen kreist ein, Ziehen malt
   einen Pfeil), dazu optional eine Frage oder ein Name. Beim Durchgehen und Abspielen ist sie blau zu
   sehen. Nach dem Puzzle und den Theorie-Lücken kommt jede Zeichnung dran: das Brett zeigt ihre
   Stellung, du zeichnest aus dem Gedächtnis, „Prüfen“ vergleicht (grün richtig, orange fehlte, rot zu
-  viel). Die Farbe zählt mit. Fehler zählen wie ein falscher Zug. Ändern sich die Züge davor, fällt die Zeichnung weg.
+  viel). Der Stift (die Farbe) zählt mit. Fehler zählen wie ein falscher Zug. Ändern sich die Züge davor, fällt die Zeichnung weg.
 - Während eines Puzzles: **Zielstellung zeigen** als Hilfe, **↺ Nochmal von vorn**. Ein Zug aus
   einer anderen gespeicherten Variante gibt nur einen Hinweis, ein falscher Zug wird korrigiert
   und die Karte kommt bald wieder.

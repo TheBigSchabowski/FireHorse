@@ -6,7 +6,7 @@ import repertoire.core.Exchange
 import repertoire.core.FileStore
 import repertoire.core.Library
 import repertoire.core.Mark
-import repertoire.core.MarkColor
+import repertoire.core.Ink
 import repertoire.core.Move
 import repertoire.core.Progress
 import repertoire.core.Store
@@ -65,28 +65,74 @@ class DrawingTest {
         assertEquals(Mark(parseSquare("d5"), parseSquare("d5")), mark("d5"))
         assertEquals("e2e4", mark("e2e4").toString())
         assertTrue(mark("d5").circle)
-        assertEquals("Pfeil e2→e4", mark("e2e4").describe())
+        assertEquals("Pfeil e2→e4 (Grün)", mark("e2e4").describe())
     }
 
     @Test
-    fun colorsAndFieldsAreSavedReadably() {
-        val red = Mark(parseSquare("e2"), parseSquare("e4"), MarkColor.RED)
-        assertEquals("red:e2e4", red.toString())
-        assertEquals(red, mark("red:e2e4"))
-        val field = Mark(parseSquare("d5"), parseSquare("d5"), MarkColor.BLUE, field = true)
-        assertEquals("blue:#d5", field.toString())
-        assertEquals(field, mark("blue:#d5"))
+    fun pensAndFieldsAreSavedReadably() {
+        val second = Mark(parseSquare("e2"), parseSquare("e4"), 1)
+        assertEquals("2:e2e4", second.toString())
+        assertEquals(second, mark("2:e2e4"))
+        val field = Mark(parseSquare("d5"), parseSquare("d5"), 5, field = true)
+        assertEquals("6:#d5", field.toString())
+        assertEquals(field, mark("6:#d5"))
         assertEquals("#d5", mark("#d5").toString())
         assertFalse(field.circle)
-        assertEquals("roter Pfeil e2→e4", red.describe())
-        assertEquals("blaues Feld d5", field.describe())
-        assertEquals("gelber Kreis c3", mark("yellow:c3").describe())
+        assertEquals("Pfeil e2→e4 (Rot)", second.describe())
+        assertEquals("Feld d5 (Türkis)", field.describe())
+        // What the pens are set to is what feedback names.
+        assertEquals("Pfeil e2→e4 (Gelb)", second.describe(listOf(Ink.GREEN, Ink.YELLOW) + Ink.DEFAULT.drop(2)))
+    }
+
+    @Test
+    fun drawingsFromVersion1_12_0StillRead() {
+        assertEquals(mark("2:e2e4"), mark("2:e2e4"))
+        assertEquals(mark("3:#d5"), mark("blue:#d5"))
+        assertEquals(mark("4:c3"), mark("yellow:c3"))
+        assertEquals(mark("e2e4"), mark("green:e2e4"))
+    }
+
+    @Test
+    fun aPenThatDoesNotExistIsAnError() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> { mark("7:e2e4") }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { mark("purple:e2e4") }
+    }
+
+    @Test
+    fun thePensColorsAreSetInTheConfiguration() {
+        val vm = app()
+        assertEquals(Ink.DEFAULT, vm.library.settings.inks)
+        vm.setPenInk(4, Ink.PINK)
+        assertEquals(Ink.PINK, vm.library.settings.inks[4])
+        assertEquals(Ink.PINK, app().library.settings.inks[4])
+        vm.resetPens()
+        assertEquals(Ink.DEFAULT, vm.library.settings.inks)
+    }
+
+    @Test
+    fun arrowKeysSwitchThePenOnlyWhileDrawing() {
+        val vm = app()
+        val id = vm.withDrawings()
+        vm.editVariant(vm.library.variants.first { it.id == id })
+        assertFalse(vm.penActive)
+        vm.run(Command.DRAW)
+        assertTrue(vm.penActive)
+        vm.penStep(-1)
+        assertEquals(5, vm.pen.value.color)
+        vm.penStep(1)
+        vm.penStep(1)
+        assertEquals(1, vm.pen.value.color)
+        vm.penToggleField()
+        assertTrue(vm.pen.value.field)
+        vm.run(Command.DRAW)
+        vm.run(Command.DRAW_KEPT)
+        assertTrue(vm.penActive)
     }
 
     @Test
     fun theSameShapeInAnotherColorTakesTheNewColor() {
         val marks = listOf(mark("e2e4"), mark("d5"))
-        assertEquals(listOf(mark("red:e2e4"), mark("d5")), marks.toggle(mark("red:e2e4")))
+        assertEquals(listOf(mark("2:e2e4"), mark("d5")), marks.toggle(mark("2:e2e4")))
         assertEquals(listOf(mark("d5")), marks.toggle(mark("e2e4")))
         // A circle and a field on the same square are two things.
         assertEquals(listOf(mark("e2e4"), mark("d5"), mark("#d5")), marks.toggle(mark("#d5")))
@@ -94,10 +140,10 @@ class DrawingTest {
 
     @Test
     fun theColorCountsInTheCheck() {
-        val saved = Drawing(0, listOf(mark("red:e2e4"), mark("#d5")))
-        assertTrue(DrawingCheck.of(saved, listOf(mark("#d5"), mark("red:e2e4"))).correct)
+        val saved = Drawing(0, listOf(mark("2:e2e4"), mark("#d5")))
+        assertTrue(DrawingCheck.of(saved, listOf(mark("#d5"), mark("2:e2e4"))).correct)
         assertFalse(DrawingCheck.of(saved, listOf(mark("#d5"), mark("e2e4"))).correct)
-        assertFalse(DrawingCheck.of(saved, listOf(mark("d5"), mark("red:e2e4"))).correct)
+        assertFalse(DrawingCheck.of(saved, listOf(mark("d5"), mark("2:e2e4"))).correct)
     }
 
     @Test
@@ -268,7 +314,7 @@ class DrawingTest {
         assertFalse(s.drawingCheck!!.correct)
         assertTrue(s.done)
         assertEquals(1, vm.mistakes(s))
-        assertTrue("Pfeil f1→b5" in s.feedback!!.text)
+        assertTrue("Pfeil f1→b5 (Grün)" in s.feedback!!.text)
     }
 
     @Test

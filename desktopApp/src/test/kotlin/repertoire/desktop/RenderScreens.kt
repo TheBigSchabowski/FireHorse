@@ -111,7 +111,7 @@ fun main() {
         editVariant(library.variants.last())
         editorGoTo(9)
         editorNewDrawing()
-        for (m in listOf("yellow:#d5", "red:b7b5", "f3g4", "blue:e4")) editorDrawingMark(repertoire.core.Mark.parse(m))
+        for (m in listOf("4:#d5", "2:b7b5", "f3g4", "3:e4", "5:c6")) editorDrawingMark(repertoire.core.Mark.parse(m))
         editorDrawingQuestion("Was will Weiß, was Schwarz?")
     }
     render("drawing-edit") { it.withDrawing() }
@@ -121,7 +121,7 @@ fun main() {
         saveEditor()
         practice(library.variants.last().id)
         for (uci in session!!.attempt!!.quiz.variant.moves) submitMove(Move.fromUci(uci))
-        drawingMark(repertoire.core.Mark.parse("yellow:#d5"))
+        drawingMark(repertoire.core.Mark.parse("4:#d5"))
         drawingMark(repertoire.core.Mark.parse("g2g4"))
     }
     render("drawing-quiz") { it.askDrawing() }

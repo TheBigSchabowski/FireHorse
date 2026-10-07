@@ -120,13 +120,14 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
 /** The other shortcuts, for the list: keyboard, then what they do. */
 internal val OTHER_KEYS = listOf(
     "Cmd/Strg+T" to "Theorie öffnen (beim Eingeben einer Variante)",
-    "← / →" to "Züge der Variante durchgehen",
+    "← / →" to "Züge der Variante durchgehen; beim Zeichnen: Farbe wechseln",
+    "↑ / ↓" to "beim Zeichnen: Kreis oder ausgefülltes Feld",
     "Cmd/Strg+Shift+C" to "Auswahl in der Theorie zur Lücke machen",
     "8 + Tab" to "„@8. Ng4“ in der Theorie ergänzen, nochmal Tab für Schwarz",
     "Enter" to "Lücken prüfen, dann „Gut“ / „Weiter“",
     "Leertaste" to "„Gut“ / „Weiter“, wenn alles geprüft ist",
     "Rechtsklick" to "Ziehen malt einen Pfeil aufs Brett, auf einem Feld einen Kreis",
-    "+ Shift / Alt / beide" to "beim Zeichnen: rot / blau / gelb",
+    "+ Shift / Alt / beide" to "beim Zeichnen: Farbe 2 / 3 / 4",
 )
 
 /** The same on a phone, without a keyboard. */

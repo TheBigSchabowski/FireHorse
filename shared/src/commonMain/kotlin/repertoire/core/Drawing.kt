@@ -7,55 +7,88 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
-/** The colors to draw with, as on lichess; [code] is how a color is saved. */
-enum class MarkColor(val code: String, val label: String) {
-    GREEN("green", "grün"),
-    RED("red", "rot"),
-    BLUE("blue", "blau"),
-    YELLOW("yellow", "gelb"),
+/** The colors the six pens can be set to; [rgb] as 0xRRGGBB. */
+enum class Ink(val label: String, val rgb: Int) {
+    GREEN("Grün", 0x15781B),
+    RED("Rot", 0x882020),
+    BLUE("Blau", 0x003088),
+    ORANGE("Orange", 0xE68F00),
+    PURPLE("Lila", 0x6A1B9A),
+    TEAL("Türkis", 0x00838F),
+    PINK("Pink", 0xC2185B),
+    LIME("Hellgrün", 0x7CB342),
+    SKY("Hellblau", 0x1E88E5),
+    YELLOW("Gelb", 0xFBC02D),
+    CORAL("Koralle", 0xF4511E),
+    CRIMSON("Dunkelrot", 0x5D0F0F),
+    BROWN("Braun", 0x6D4C41),
+    GREY("Grau", 0x757575),
+    BLACK("Schwarz", 0x212121),
+    WHITE("Weiß", 0xFAFAFA),
+    ;
+
+    companion object {
+        const val PENS = 6
+
+        /** The first four as on lichess, then two more. */
+        val DEFAULT: List<Ink> = listOf(GREEN, RED, BLUE, ORANGE, PURPLE, TEAL)
+
+        /** The six pens from their saved names; a missing or unknown one keeps its default. */
+        fun pens(names: List<String>): List<Ink> =
+            DEFAULT.mapIndexed { i, d -> names.getOrNull(i)?.let { n -> entries.firstOrNull { it.name == n } } ?: d }
+    }
 }
 
 /**
  * Something drawn on the board: an arrow from [from] to [to], or on a single square (the same
- * [from] and [to]) a circle, or with [field] the whole square filled in.
+ * [from] and [to]) a circle, or with [field] the whole square filled in. [color] is one of the six
+ * pens (0 to 5), whose colors are set in the configuration.
  */
 @Serializable(with = MarkSerializer::class)
-data class Mark(val from: Int, val to: Int, val color: MarkColor = MarkColor.GREEN, val field: Boolean = false) {
+data class Mark(val from: Int, val to: Int, val color: Int = 0, val field: Boolean = false) {
     init {
         require(!field || from == to) { "Ein Feld ist kein Pfeil" }
+        require(color in 0 until Ink.PENS) { "Farbe ${color + 1} gibt es nicht" }
     }
 
     val circle: Boolean get() = from == to && !this.field
 
     /** Where it is and what it is, without the color: drawing the same shape in another color replaces it. */
-    val shape: Mark get() = copy(color = MarkColor.GREEN)
+    val shape: Mark get() = copy(color = 0)
 
-    /** "d5" for a circle, "#d5" for a field, "e2e4" for an arrow, "red:" in front for a color other than green, as it is saved. */
+    /** "d5" for a circle, "#d5" for a field, "e2e4" for an arrow, "2:" in front for pen 2 to 6, as it is saved. */
     override fun toString(): String {
         val body = when {
             field -> "#" + squareName(from)
             from == to -> squareName(from)
             else -> squareName(from) + squareName(to)
         }
-        return if (color == MarkColor.GREEN) body else "${color.code}:$body"
+        return if (color == 0) body else "${color + 1}:$body"
     }
 
-    /** "Kreis d5", "rotes Feld d5", "blauer Pfeil e2→e4", for feedback. */
-    fun describe(): String {
-        val (noun, ending) = when {
-            field -> "Feld" to "es"
-            from == to -> "Kreis" to "er"
-            else -> "Pfeil" to "er"
+    /** "Kreis d5 (Grün)", "Pfeil e2→e4 (Rot)", for feedback; [pens] says what the pens are set to. */
+    fun describe(pens: List<Ink> = Ink.DEFAULT): String {
+        val noun = when {
+            field -> "Feld"
+            from == to -> "Kreis"
+            else -> "Pfeil"
         }
         val where = if (from == to) squareName(from) else "${squareName(from)}→${squareName(to)}"
-        return (if (color == MarkColor.GREEN) "" else color.label + ending + " ") + "$noun $where"
+        return "$noun $where (${pens[color].label})"
     }
 
     companion object {
+        /** How version 1.12.0 named the four pens it had. */
+        private val OLD_NAMES = listOf("green", "red", "blue", "yellow")
+
         fun parse(text: String): Mark {
-            val (colorCode, rest) = if (':' in text) text.split(':', limit = 2).let { it[0] to it[1] } else null to text
-            val color = colorCode?.let { c -> MarkColor.entries.firstOrNull { it.code == c } ?: throw IllegalArgumentException("Unbekannte Farbe „$c“") }
-                ?: MarkColor.GREEN
+            val (prefix, rest) = if (':' in text) text.split(':', limit = 2).let { it[0] to it[1] } else null to text
+            val color = when (prefix) {
+                null -> 0
+                in OLD_NAMES -> OLD_NAMES.indexOf(prefix)
+                else -> prefix.toIntOrNull()?.minus(1)?.takeIf { it in 0 until Ink.PENS }
+                    ?: throw IllegalArgumentException("Unbekannte Farbe „$prefix“")
+            }
             val field = rest.startsWith("#")
             val squares = rest.removePrefix("#")
             require(squares.length == 2 || (squares.length == 4 && !field)) { "„$text“ ist weder ein Feld noch ein Pfeil" }

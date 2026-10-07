@@ -50,6 +50,10 @@ fun main() = application {
                 viewModel.prefs != null -> (event.key == Key.Escape).also { if (it) viewModel.prefsBack() }
                 // Cmd/Ctrl+T opens the theory field while entering a variant.
                 command && event.key == Key.T && viewModel.editor != null -> viewModel.toggleTheory().let { true }
+                // While drawing, ← → switch the pen and ↑ ↓ circle or field.
+                viewModel.penActive && event.key == Key.DirectionLeft -> viewModel.penStep(-1).let { true }
+                viewModel.penActive && event.key == Key.DirectionRight -> viewModel.penStep(1).let { true }
+                viewModel.penActive && (event.key == Key.DirectionUp || event.key == Key.DirectionDown) -> viewModel.penToggleField().let { true }
                 // Arrow keys step through the moves of the variant being edited. A focused text
                 // field gets them first, so typing in "Theorie" is not affected.
                 viewModel.editor != null && event.key == Key.DirectionLeft -> viewModel.editorStepBack().let { true }

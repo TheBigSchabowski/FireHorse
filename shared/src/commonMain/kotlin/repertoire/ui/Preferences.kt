@@ -40,14 +40,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import repertoire.core.Ink
 import repertoire.core.Library
+import repertoire.core.Mark
+import repertoire.core.Position
 import repertoire.core.Settings
+import repertoire.core.parseSquare
 
 /** The preferences screen: the configuration, or the help with an optional topic open. */
 sealed interface Prefs {
@@ -154,6 +159,8 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean) {
                 }
             }
         }
+        Spacer(Modifier.height(16.dp))
+        PenColors(vm, settings)
     }
     if (touch) {
         val step = settings.holdStepMs
@@ -460,10 +467,11 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             )
             Bullet(
                 "Farben und Felder",
-                "im Zeichenmodus liegt unten auf dem Brett eine Leiste: vier Farben (grün, rot, blau, gelb), dazu Kreis oder ausgefülltes Feld " +
+                "beim Zeichnen liegt unten auf dem Brett eine Leiste: sechs Stifte, dazu Kreis oder ausgefülltes Feld " +
                     "für das, was ein Tipp auf ein Feld malt. Die Wahl gilt für alles Zeichnen, bis du sie änderst. " +
-                    "Dasselbe in einer anderen Farbe färbt um." +
-                    (if (touch) "" else " Am Computer malt Shift rot, Alt blau, beide gelb."),
+                    "Dasselbe mit einem anderen Stift färbt um." +
+                    (if (touch) "" else " Am Computer wechseln ← → den Stift und ↑ ↓ zwischen Kreis und Feld; Shift malt mit Stift 2, Alt mit 3, beide mit 4.") +
+                    " Welche Farbe jeder Stift hat, stellst du in der Konfiguration unter „Brett“ ein.",
             )
             Para("So Gezeichnetes ist nur für dich, für den Moment: es wird nicht gespeichert und nie abgefragt. Das gilt im Editor wie beim Üben.")
             Bullet(
@@ -482,7 +490,8 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             Para(
                 "Nach dem Puzzle (und nach den Theorie-Lücken) wird jede Zeichnung abgefragt: das Brett zeigt ihre Stellung, du zeichnest aus dem Gedächtnis, " +
                     "„Prüfen“ vergleicht. Grün war richtig, orange fehlte, rot war zu viel; jeder Fehler zählt wie ein falscher Zug. " +
-                    "Die Farbe zählt mit, und ein Pfeil nur in seiner Richtung. „Züge üben“ fragt keine Zeichnungen ab.",
+                    "Der Stift zählt mit. "  +
+                    "Ein Pfeil zählt nur in seiner Richtung. „Züge üben“ fragt keine Zeichnungen ab.",
             )
             Para("Ändern sich die Züge vor einer Zeichnung, passt sie nicht mehr zur Stellung und fällt weg.")
         }
@@ -606,4 +615,75 @@ private fun Bullet(title: String, text: String) {
             style = MaterialTheme.typography.bodyMedium,
         )
     }
+}
+
+/**
+ * The six pens: pick one, then its color on the little board of inks next to it. A board shows
+ * all six as arrows and fields, as they will look.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PenColors(vm: AppViewModel, settings: Settings) {
+    val inks = settings.inks
+    var chosen by remember { mutableStateOf(0) }
+    Text("Zeichenfarben")
+    Text(
+        "Sechs Stifte zum Zeichnen; beim Zeichnen wechseln ← → (am Handy die Leiste unten auf dem Brett). " +
+            "Tippe einen Stift an, dann seine Farbe. Schon Gezeichnetes nimmt die neue Farbe an.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        inks.forEachIndexed { i, ink ->
+            Box(
+                Modifier.size(36.dp)
+                    .border(3.dp, if (i == chosen) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                    .padding(4.dp)
+                    .background(ink.solid, RoundedCornerShape(5.dp))
+                    .clickable { chosen = i },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("${i + 1}", color = if (ink == Ink.WHITE || ink == Ink.YELLOW) Color.Black else Color.White, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+    Text("Stift ${chosen + 1}: ${inks[chosen].label}", style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The inks laid out like a little board, four by four.
+        Column {
+            for (row in Ink.entries.chunked(4)) {
+                Row {
+                    for (ink in row) {
+                        val current = ink == inks[chosen]
+                        Box(
+                            Modifier.size(40.dp).background(ink.solid)
+                                .border(if (current) 3.dp else 0.dp, if (current) Color.White else Color.Transparent)
+                                .clickable { vm.setPenInk(chosen, ink) },
+                        )
+                    }
+                }
+            }
+        }
+        ChessBoard(
+            position = Position.START,
+            whiteBottom = true,
+            lastMove = null,
+            marks = emptyMap(),
+            interactive = false,
+            onMove = {},
+            modifier = Modifier.size(220.dp),
+            kept = PEN_PREVIEW.map(::KeptMark),
+        )
+    }
+    TextButton(onClick = vm::resetPens) { Text("Standardfarben") }
+}
+
+/** One arrow and one field per pen, on the files a to f. */
+private val PEN_PREVIEW: List<Mark> = (0 until Ink.PENS).flatMap { i ->
+    val file = 'a' + i
+    val field = parseSquare("${file}5")
+    listOf(Mark(parseSquare("${file}2"), parseSquare("${file}4"), i), Mark(field, field, i, field = true))
 }
