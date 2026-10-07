@@ -406,8 +406,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
-            Command.COPY_ALL -> copyAll()
-            Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN -> when {
+            Command.COPY_ALL -> copyAll(here = false)
+            Command.COPY_ALL_HERE -> copyAll(here = true)
+            Command.NEW_VARIANT, Command.PASTE_PGN, Command.PASTE_FEN, Command.PASTE_ALL -> when {
                 editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
                 command == Command.NEW_VARIANT -> {
                     paste = null
@@ -461,22 +462,33 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     /**
      * Ctrl+B p: the whole variant on the board as PGN, with names, theory and drawings: the one in
-     * the editor as it is right now, or the puzzle's.
+     * the editor as it is right now, or the puzzle's. Ctrl+B o ([here]): only the moves up to the
+     * position on the board and the drawings up to there; the theory is whole either way.
      */
-    private fun copyAll() {
-        val variant = editor?.asVariant() ?: session?.attempt?.quiz?.variant
+    private fun copyAll(here: Boolean) {
+        val e = editor
+        val s = session
+        val variant = e?.asVariant() ?: s?.attempt?.quiz?.variant
+        val ply = when {
+            !here -> null
+            e != null -> e.cursor
+            else -> s?.preview ?: s?.attempt?.played?.size
+        }
         val copy = copyToClipboard
         when {
             variant == null -> flash = "Alles kopieren geht in einer Variante oder einem Puzzle."
             copy == null -> flash = "Hier gibt es keine Zwischenablage."
-            variant.moves.isEmpty() && !variant.setUp -> flash = "Noch kein Zug auf dem Brett."
+            (ply ?: variant.moves.size) == 0 && !variant.setUp -> flash = "Noch kein Zug auf dem Brett."
             else -> {
-                copy(Pgn.exportAll(variant, library.settings.penColors))
+                val plies = ply?.coerceAtMost(variant.moves.size) ?: variant.moves.size
+                copy(Pgn.exportAll(variant, library.settings.penColors, upTo = plies))
+                val drawings = variant.drawings.count { it.ply <= plies }
                 val extras = listOfNotNull(
                     "Theorie".takeIf { variant.theory.isNotBlank() },
-                    variant.drawings.size.takeIf { it > 0 }?.let { if (it == 1) "1 Zeichnung" else "$it Zeichnungen" },
+                    drawings.takeIf { it > 0 }?.let { if (it == 1) "1 Zeichnung" else "$it Zeichnungen" },
                 )
-                flash = "PGN mit allem kopiert (${variant.moves.size} Halbzüge" + extras.joinToString("") { ", $it" } + ")."
+                flash = (if (here) "Bis hier mit allem kopiert" else "PGN mit allem kopiert") +
+                    " ($plies Halbzüge" + extras.joinToString("") { ", $it" } + ")."
             }
         }
     }
@@ -1393,8 +1405,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
      */
     fun applyPaste() {
         val p = paste ?: return
+        val all = p.kind == Command.PASTE_ALL
         val line = try {
-            Pgn.parse(p.text)
+            if (all) Pgn.parseAll(p.text) else Pgn.parse(p.text)
         } catch (e: IllegalArgumentException) {
             p.error = e.message ?: "Der Text lässt sich nicht lesen."
             return
@@ -1406,9 +1419,11 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             name = line.name,
             moves = line.moves.map(Move::fromUci),
             playWhite = line.playWhite,
+            theory = line.theory,
             // At move zero, so the line can be walked through and cut where it gets interesting.
             fromStart = true,
             startFen = line.startFen,
+            drawings = line.drawings,
             note = listOfNotNull(pasteNote(line), backToPuzzle).joinToString(" "),
         )
     }
@@ -1421,6 +1436,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 append("${line.moves.size} Züge ab der FEN-Stellung übernommen.")
             else ->
                 append("${line.moves.size} Züge übernommen. Mit ▶ durchgehen, „Ab hier kürzen“ schneidet den Rest weg.")
+        }
+        if (line.theory.isNotBlank() || line.drawings.isNotEmpty()) {
+            val n = line.drawings.size
+            append(" Dazu " + listOfNotNull("die Theorie".takeIf { line.theory.isNotBlank() }, if (n == 0) null else if (n == 1) "1 Zeichnung" else "$n Zeichnungen").joinToString(" und ") + ".")
         }
         if (line.otherGames > 0) {
             append(" Im Text standen ${line.otherGames + 1} Partien – übernommen ist die erste.")

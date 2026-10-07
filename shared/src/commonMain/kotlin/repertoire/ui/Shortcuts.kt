@@ -122,6 +122,8 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     COPY_PGN('v', "PGN bis zur Stellung kopieren", null),
     COPY_FEN('y', "FEN der Stellung kopieren", null),
     COPY_ALL('p', "Alles kopieren: PGN mit Theorie und Zeichnungen", null),
+    COPY_ALL_HERE('o', "Alles bis zur Stellung kopieren (Theorie ganz, Zeichnungen bis hier)", null),
+    PASTE_ALL('d', "PGN mit allem einfügen (Theorie und Zeichnungen)", null),
     PASTE_FEN('f', "FEN einfügen", 4),
     DRAW('m', "Zeichnen auf dem Brett an/aus", 1),
     DRAW_KEPT('n', "Zeichnung zum Abfragen an/aus (im Editor)", null),
@@ -417,6 +419,8 @@ internal val Command.short: String get() = when (this) {
     Command.COPY_FEN -> "FEN kopieren"
     Command.COPY_PGN -> "PGN kopieren"
     Command.COPY_ALL -> "Alles kopieren"
+    Command.COPY_ALL_HERE -> "Alles bis hier"
+    Command.PASTE_ALL -> "Alles einfügen"
     Command.PLAY -> "Abspielen"
     Command.SETTINGS -> "Einstellungen"
 }

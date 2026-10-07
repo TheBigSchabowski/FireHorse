@@ -133,6 +133,8 @@ oder ganz ausschalten.
 | `Strg+B v` | Kürzel-Liste antippen | PGN bis zur Stellung auf dem Brett kopieren |
 | `Strg+B y` | Kürzel-Liste antippen | FEN der Stellung auf dem Brett kopieren (auch mitten im Halbzug-Durchgehen) |
 | `Strg+B p` | Kürzel-Liste antippen | Alles kopieren: die ganze Variante als PGN mit Eröffnung, Name, Theorie und Zeichnungen (als `[%cal]`/`[%csl]` wie bei lichess) |
+| `Strg+B o` | Kürzel-Liste antippen | Alles bis zur Stellung kopieren: Züge und Zeichnungen bis zum Brett, die Theorie ganz |
+| `Strg+B d` | Kürzel-Liste antippen | PGN mit allem einfügen: Züge, Namen, Theorie und Zeichnungen kommen zurück (auch aus lichess) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |

@@ -491,6 +491,31 @@ class ShortcutsTest {
     }
 
     @Test
+    fun ctrlBOAndCtrlBDCopyUpToHereAndPasteItBack() {
+        val vm = app()
+        val copied = mutableListOf<String>()
+        vm.copyToClipboard = { copied += it }
+        vm.addVariant("Sizilianisch", "e4", "c5", "Nf3", "d6")
+        vm.editVariant(vm.library.variants.single())
+        vm.editor!!.theory = androidx.compose.ui.text.input.TextFieldValue("Merken: ((d6))")
+        vm.editor!!.cursor = 2
+        vm.ctrlB()
+        vm.key(Key.O, 'o')
+        assertTrue(copied.last().endsWith("1. e4 c5 { Merken: ((d6)) } *"), copied.last())
+        vm.cancelEditor()
+
+        vm.ctrlB()
+        vm.key(Key.D, 'd')
+        assertEquals(Command.PASTE_ALL, vm.paste?.kind)
+        vm.setPasteText(copied.last())
+        vm.applyPaste()
+        val e = assertNotNull(vm.editor)
+        assertEquals(2, e.moves.size)
+        assertEquals("Merken: ((d6))", e.theory.text)
+        assertEquals("Sizilianisch", e.opening)
+    }
+
+    @Test
     fun copiedPgnReadsBackFromASetUpPosition() {
         val fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
         val line = repertoire.core.Pgn.parse(repertoire.core.Pgn.export(fen, listOf("2. Nf3", "2... d6")))

@@ -14,6 +14,10 @@ data class PastedLine(
     val playWhite: Boolean,
     /** Games in the text after the first one; those are not taken over. */
     val otherGames: Int = 0,
+    /** Only from [Pgn.parseAll]: the comments without drawings, as theory. */
+    val theory: String = "",
+    /** Only from [Pgn.parseAll]: the drawings in the comments, at their moves. */
+    val drawings: List<Drawing> = emptyList(),
 ) {
     val setUp: Boolean get() = startFen != Position.START_FEN
 }
@@ -70,39 +74,55 @@ object Pgn {
         return header + moves
     }
 
-    /** lichess's four arrow colors, which are also the first four pens by default. */
+    /** lichess's four arrow colors, which are also the first four pens by default (green, red, blue, orange). */
     private val LICHESS_COLORS = listOf('G' to 0x15781B, 'R' to 0x882020, 'B' to 0x003088, 'Y' to 0xE68F00)
 
-    /** The lichess color closest to [pen]: lichess (and ChessBase) only know these four. */
-    private fun lichessColor(pen: PenColor): Char = LICHESS_COLORS.minBy { (_, rgb) ->
-        val dr = (rgb shr 16 and 0xFF) - (pen.rgb shr 16 and 0xFF)
-        val dg = (rgb shr 8 and 0xFF) - (pen.rgb shr 8 and 0xFF)
-        val db = (rgb and 0xFF) - (pen.rgb and 0xFF)
-        dr * dr + dg * dg + db * db
-    }.first
+    /**
+     * The lichess letter of pen [color]: the first four pens are lichess's four, in its order; pens 5
+     * and 6 take whichever of them their color [pens] is closest to.
+     */
+    private fun lichessColor(color: Int, pens: List<PenColor>): Char = LICHESS_COLORS.getOrNull(color)?.first
+        ?: LICHESS_COLORS.minBy { (_, rgb) ->
+            val pen = pens[color].rgb
+            val dr = (rgb shr 16 and 0xFF) - (pen shr 16 and 0xFF)
+            val dg = (rgb shr 8 and 0xFF) - (pen shr 8 and 0xFF)
+            val db = (rgb and 0xFF) - (pen and 0xFF)
+            dr * dr + dg * dg + db * db
+        }.first
 
-    /** A comment may not close itself early, and a header value may not end in the middle. */
+    /** "[%csl Gd5]", "[%cal Ge2e4]" as lichess writes them, and FireHorse's own "[%fh 5:#d5]". */
+    private val COMMAND = Regex("""\[%(\w+)\s+([^\]]*)\]""")
+
+    /** A comment may not close itself early. */
     private fun commentText(text: String) = text.replace('{', '(').replace('}', ')').trim()
 
-    /** A drawing as lichess writes it into a comment: its question, then "[%csl Gd5][%cal Ge2e4]". */
+    /**
+     * A drawing as a comment: its question, then its marks as lichess writes them. What lichess
+     * cannot say (pens 5 and 6, filled fields) comes exactly once more in "[%fh …]", which [parseAll]
+     * prefers; lichess shows its approximation.
+     */
     private fun drawingComment(d: Drawing, pens: List<PenColor>): String {
-        fun code(m: Mark) = lichessColor(pens[m.color]) + squareName(m.from) + if (m.from == m.to) "" else squareName(m.to)
+        fun code(m: Mark) = lichessColor(m.color, pens) + squareName(m.from) + if (m.from == m.to) "" else squareName(m.to)
         val squares = d.marks.filter { it.from == it.to }.joinToString(",", transform = ::code)
         val arrows = d.marks.filter { it.from != it.to }.joinToString(",", transform = ::code)
+        val exact = d.marks.any { it.color >= LICHESS_COLORS.size || it.field }
         return listOf(
             commentText(d.question),
             if (squares.isEmpty()) "" else "[%csl $squares]",
             if (arrows.isEmpty()) "" else "[%cal $arrows]",
+            if (exact) "[%fh ${d.marks.joinToString(",")}]" else "",
         ).filter { it.isNotEmpty() }.joinToString(" ")
     }
 
     /**
      * All of [variant] as PGN: opening and name as headers, every move, each drawing as a comment
      * after its move (arrows and circles as lichess writes them, so they show up there), and the
-     * theory at the end with its gaps filled in. [pens] are what the pens look like, for the
-     * nearest of lichess's colors. Reads back with [parse], which takes the moves and names.
+     * theory at the end as it is written, gaps included. With [upTo], only the first [upTo] moves and
+     * the drawings up to there; the theory is always whole. [pens] are what the pens look like.
+     * Reads back completely with [parseAll], and the moves and names with [parse].
      */
-    fun exportAll(variant: Variant, pens: List<PenColor> = Ink.DEFAULT): String {
+    fun exportAll(variant: Variant, pens: List<PenColor> = Ink.DEFAULT, upTo: Int? = null): String {
+        val plies = upTo?.coerceIn(0, variant.moves.size) ?: variant.moves.size
         fun header(value: String) = value.replace('"', '\'').trim()
         val title = listOf(variant.opening, variant.name).map(::header).filter { it.isNotEmpty() }
         val headers = buildList {
@@ -124,18 +144,78 @@ object Pgn {
             parts += "{ $text }"
             numberNext = true
         }
-        fun drawingsAt(ply: Int) = comment(variant.drawings.filter { it.ply == ply }.joinToString(" ") { drawingComment(it, pens) })
+        fun drawingsAt(ply: Int) = variant.drawings.filter { it.ply == ply }.forEach { comment(drawingComment(it, pens)) }
 
         drawingsAt(0)
-        variant.numberedSan().forEachIndexed { i, numbered ->
+        variant.numberedSan().take(plies).forEachIndexed { i, numbered ->
             val black = numbered.substringBefore(' ').endsWith("...")
             parts += if (black && !numberNext) numbered.substringAfter(' ') else numbered
             numberNext = false
             drawingsAt(i + 1)
         }
-        comment(commentText(Cloze.solved(variant.theory)))
+        comment(commentText(variant.theory))
         parts += "*"
         return headers.joinToString("\n") { (k, v) -> "[$k \"$v\"]" } + "\n\n" + parts.joinToString(" ")
+    }
+
+    /** Stands in for a comment while the moves around it are counted. */
+    private val PLACE = Regex("""⟦(\d+)⟧""")
+
+    /** The marks of a comment: FireHorse's exact ones if there, else lichess's (G, R, B, Y as pens 1 to 4). */
+    private fun marksOf(comment: String): List<Mark> {
+        val commands = COMMAND.findAll(comment).associate { it.groupValues[1] to it.groupValues[2] }
+        commands["fh"]?.let { exact -> return exact.split(',', ' ').filter { it.isNotBlank() }.map { Mark.parse(it.trim()) } }
+        return listOfNotNull(commands["csl"], commands["cal"]).flatMap { it.split(',') }.map { it.trim() }.mapNotNull { code ->
+            val color = LICHESS_COLORS.indexOfFirst { it.first == code.firstOrNull() }
+            val squares = code.drop(1)
+            if (color < 0 || (squares.length != 2 && squares.length != 4)) return@mapNotNull null
+            runCatching {
+                val from = parseSquare(squares.take(2))
+                Mark(from, if (squares.length == 4) parseSquare(squares.drop(2)) else from, color)
+            }.getOrNull()
+        }
+    }
+
+    /**
+     * Like [parse], and the comments too: one with arrows or circles ([%csl], [%cal], FireHorse's
+     * [%fh]) becomes a drawing at its move, with the rest of its text as the question; the others
+     * become the theory, in their order. Side lines and their comments still fall away.
+     */
+    fun parseAll(text: String): PastedLine {
+        val cleaned = text.replace('\u00A0', ' ').replace('\u202F', ' ').replace("\uFEFF", "")
+        require(cleaned.isNotBlank()) { "Da ist kein Text zum Einlesen." }
+        val games = split(cleaned)
+        val line = parseGame(games.first()).copy(otherGames = games.size - 1)
+
+        val comments = mutableListOf<String>()
+        var body = HEADER.replace(games.first(), " ")
+        body = BRACE_COMMENT.replace(body) { match ->
+            comments += match.value.removePrefix("{").removeSuffix("}")
+            " ⟦${comments.lastIndex}⟧ "
+        }
+        body = REST_OF_LINE.replace(body, " ")
+        while (INNERMOST_VARIATION.containsMatchIn(body)) body = INNERMOST_VARIATION.replace(body, " ")
+        body = NAG.replace(body, " ")
+        val headerFen = HEADER.findAll(games.first()).any { it.groupValues[1] == "FEN" && it.groupValues[2].isNotBlank() }
+        val movesText = if (headerFen) body else splitOffFen(body)?.second ?: body
+        val start = Position.fromFen(line.startFen)
+
+        val theory = mutableListOf<String>()
+        val drawings = mutableListOf<Drawing>()
+        for (place in PLACE.findAll(movesText)) {
+            val comment = comments[place.groupValues[1].toInt()]
+            val words = COMMAND.replace(comment, " ").replace(Regex("\\s+"), " ").trim()
+            val marks = marksOf(comment)
+            if (marks.isEmpty()) {
+                // As written, lines and all; only lichess's clock and evaluation go.
+                if (words.isNotEmpty()) theory += COMMAND.replace(comment, "").trim()
+                continue
+            }
+            val before = PLACE.replace(movesText.substring(0, place.range.first), " ")
+            val ply = Exchange.parseMoves(before, start).size
+            drawings += Drawing(ply, marks.distinct(), words)
+        }
+        return line.copy(theory = theory.joinToString("\n\n"), drawings = drawings)
     }
 
     /** Reads [text]; throws [IllegalArgumentException] with a German explanation if it does not work out. */

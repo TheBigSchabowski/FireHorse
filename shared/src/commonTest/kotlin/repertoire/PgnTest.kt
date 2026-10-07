@@ -181,17 +181,18 @@ class PgnTest {
     }
 
     @Test
-    fun everythingGoesIntoThePgnAndTheMovesReadBack() {
+    fun everythingGoesIntoThePgnAndComesBackWithParseAll() {
         val moves = Exchange.parseMoves("1. e4 c5 2. Nf3 d6")
         val d5 = 4 * 8 + 3
         val e2 = 1 * 8 + 4
         val e4 = 3 * 8 + 4
         val v = Variant(
             "v1", "Sizilianisch", "Scheveningen \"klein\"", moves, playWhite = false,
-            theory = "Schwarz will ((d5)) spielen. {Wichtig}",
+            theory = "Schwarz will ((d5)) spielen.\n@2. Nf3 {Wichtig}",
             drawings = listOf(
                 Drawing(2, listOf(Mark(d5, d5, 1), Mark(e2, e4, 0)), "Wo greift Weiß an?"),
-                // Pen 5, set to a blue, comes out blue on lichess.
+                Drawing(2, listOf(Mark(e4, e4, 2))),
+                // Pen 5, set to a blue, shows blue on lichess; the field and the pen come back exactly.
                 Drawing(4, listOf(Mark(d5, d5, 4, field = true))),
             ),
         )
@@ -204,7 +205,8 @@ class PgnTest {
             [Variation "Scheveningen 'klein'"]
             [Result "*"]
 
-            1. e4 c5 { Wo greift Weiß an? [%csl Rd5] [%cal Ge2e4] } 2. Nf3 d6 { [%csl Bd5] } { Schwarz will d5 spielen. (Wichtig) } *
+            1. e4 c5 { Wo greift Weiß an? [%csl Rd5] [%cal Ge2e4] } { [%csl Be4] } 2. Nf3 d6 { [%csl Bd5] [%fh 5:#d5] } { Schwarz will ((d5)) spielen.
+            @2. Nf3 (Wichtig) } *
             """.trimIndent(),
             pgn,
         )
@@ -212,11 +214,43 @@ class PgnTest {
         assertEquals(moves, back.moves)
         assertEquals("Sizilianisch", back.opening)
         assertEquals("Scheveningen 'klein'", back.name)
+
+        val all = Pgn.parseAll(pgn)
+        assertEquals(moves, all.moves)
+        assertEquals(v.drawings, all.drawings)
+        assertEquals("Schwarz will ((d5)) spielen.\n@2. Nf3 (Wichtig)", all.theory)
     }
 
     @Test
-    fun aBlackMoveAfterACommentGetsItsNumber() {
-        val v = Variant("v1", "", "", Exchange.parseMoves("1. e4 c5"), drawings = listOf(Drawing(1, listOf(Mark(0, 0)))))
-        assertTrue(Pgn.exportAll(v).endsWith("1. e4 { [%csl Ga1] } 1... c5 *"))
+    fun upToAMoveKeepsTheTheoryWholeAndTheDrawingsUpToThere() {
+        val v = Variant(
+            "v1", "", "", Exchange.parseMoves("1. e4 c5 2. Nf3"), theory = "Alles",
+            drawings = listOf(Drawing(1, listOf(Mark(0, 0))), Drawing(3, listOf(Mark(1, 1)))),
+        )
+        val pgn = Pgn.exportAll(v, upTo = 2)
+        assertTrue(pgn.endsWith("1. e4 { [%csl Ga1] } 1... c5 { Alles } *"), pgn)
+        val back = Pgn.parseAll(pgn)
+        assertEquals(listOf("e2e4", "c7c5"), back.moves)
+        assertEquals(listOf(Drawing(1, listOf(Mark(0, 0)))), back.drawings)
+        assertEquals("Alles", back.theory)
+    }
+
+    @Test
+    fun aLichessStudyGivesDrawingsAndTheory() {
+        val pgn = """
+            [Event "Test"]
+            { Los geht's } 1. e4 { [%clk 0:03:00] Der beste Zug [%cal Ge2e4,Rd2d4] } 1... c5 (1... e5 { [%csl Ge5] }) 2. Nf3 { [%csl Yd5] }
+        """.trimIndent()
+        val line = Pgn.parseAll(pgn)
+        assertEquals(listOf("e2e4", "c7c5", "g1f3"), line.moves)
+        assertEquals(
+            listOf(
+                Drawing(1, listOf(Mark(1 * 8 + 4, 3 * 8 + 4, 0), Mark(1 * 8 + 3, 3 * 8 + 3, 1)), "Der beste Zug"),
+                Drawing(3, listOf(Mark(4 * 8 + 3, 4 * 8 + 3, 3))),
+            ),
+            line.drawings,
+        )
+        // The side line and its circle fall away; comments without marks are theory.
+        assertEquals("Los geht's", line.theory)
     }
 }

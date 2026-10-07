@@ -395,6 +395,7 @@ internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
                 when (p.kind) {
                     Command.PASTE_PGN -> "PGN einfügen"
                     Command.PASTE_FEN -> "FEN einfügen"
+                    Command.PASTE_ALL -> "PGN mit allem einfügen"
                     else -> "PGN oder FEN einfügen"
                 },
             )
@@ -403,9 +404,15 @@ internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
             Column {
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 Text(
-                    "Zugfolge oder Stellung hier einfügen – am Computer mit Cmd/Strg+V, am Handy lange drücken. " +
-                        "Aus einer PGN wird die Zugfolge (Kommentare und Nebenvarianten fallen weg), " +
-                        "aus einer FEN die Stellung, ab der du weiterspielst.",
+                    if (p.kind == Command.PASTE_ALL) {
+                        "Eine mit „Alles kopieren“ kopierte Variante hier einfügen – am Computer mit Cmd/Strg+V, am Handy lange drücken. " +
+                            "Züge, Eröffnung und Name kommen mit, die Theorie und die Zeichnungen an ihren Zügen. " +
+                            "Geht auch mit einer PGN von lichess: Pfeile und Kreise werden Zeichnungen, die übrigen Kommentare Theorie."
+                    } else {
+                        "Zugfolge oder Stellung hier einfügen – am Computer mit Cmd/Strg+V, am Handy lange drücken. " +
+                            "Aus einer PGN wird die Zugfolge (Kommentare und Nebenvarianten fallen weg), " +
+                            "aus einer FEN die Stellung, ab der du weiterspielst."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -413,7 +420,7 @@ internal fun PasteDialog(vm: AppViewModel, p: PasteState) {
                 OutlinedTextField(
                     p.text,
                     vm::setPasteText,
-                    label = { Text("PGN / FEN") },
+                    label = { Text(if (p.kind == Command.PASTE_ALL) "PGN mit allem" else "PGN / FEN") },
                     placeholder = {
                         Text(
                             if (p.kind == Command.PASTE_FEN) {
