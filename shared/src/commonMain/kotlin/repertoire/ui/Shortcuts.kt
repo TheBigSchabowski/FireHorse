@@ -130,6 +130,9 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     CLEAR('w', "Gezeichnetes auf dem Brett wegwischen", null),
     COLORS('k', "Zeichenfarben einstellen", null),
     PLAY('a', "Variante abspielen / anhalten", null),
+    EXPLORER('l', "lichess-Eröffnungsdatenbank zur Stellung auf dem Brett", null),
+    ENGINE('r', "Engine rechnet die Stellung auf dem Brett (am Computer)", null),
+    NOTES('e', "Eröffnungsnotizen", null),
     SETTINGS('b', "Einstellungen und Tastenkürzel", null),
     ;
 
@@ -147,6 +150,7 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
 internal val OTHER_KEYS = listOf(
     "Cmd/Strg+T" to "Theorie öffnen (beim Eingeben einer Variante)",
     "← / →" to "Züge der Variante durchgehen; beim Zeichnen: Farbe wechseln",
+    "Strg+B Enter" to "beim Durchgehen: aus einem Nebenstrang zurück auf die Variante",
     "↑ / ↓" to "beim Zeichnen: Kreis oder ausgefülltes Feld",
     "Strg+N, dann 1–9" to "„Playlist lernen“ der 1., 2., 3. … Eröffnung auf der Startseite (nicht in einem Textfeld)",
     "Shift+S" to "diese Liste öffnen und schließen (nicht in einem Textfeld); darin blättern ↑ ↓ und ← →",
@@ -314,10 +318,16 @@ class ShortcutKeys(private val vm: AppViewModel) {
         vm.prefix = false
         swallow = event.key
         if (event.key == Key.Escape) return true
+        // Ctrl+B Enter: out of a side line, back to the variant (Durchgehen).
+        if (event.key == Key.Enter || event.key == Key.NumPadEnter) {
+            vm.backToLine()
+            return true
+        }
         val char = charOf(event)
-        val command = Command.entries.firstOrNull { settings.keyOf(it) == char }
-            // The list stays reachable with ? and h even when its key was changed.
-            ?: Command.SHORTCUTS.takeIf { char == '?' || char == 'h' || event.key == Key.Slash }
+        // The list stays reachable with ? (always) and h (if free) even when its key was changed.
+        val command = Command.SHORTCUTS.takeIf { char == '?' || event.key == Key.Slash }
+            ?: Command.entries.firstOrNull { settings.keyOf(it) == char }
+            ?: Command.SHORTCUTS.takeIf { char == 'h' }
         if (command != null) vm.run(command, fromKeyboard = true) else vm.openKeys(char)
         return true
     }
@@ -422,6 +432,9 @@ internal val Command.short: String get() = when (this) {
     Command.COPY_ALL_HERE -> "Alles bis hier"
     Command.PASTE_ALL -> "Alles einfügen"
     Command.PLAY -> "Abspielen"
+    Command.EXPLORER -> "Datenbank"
+    Command.ENGINE -> "Engine"
+    Command.NOTES -> "Notizen"
     Command.SETTINGS -> "Einstellungen"
 }
 
@@ -441,11 +454,12 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
         onDismissRequest = { vm.showShortcuts = false },
         title = { Text(if (touch) "Das Pferd" else "Tastenkürzel") },
         text = {
+            // Asked for once the dialog's content is there; before that the requester points nowhere.
+            LaunchedEffect(Unit) { focus.requestFocus() }
             // The list has the keys: ↑ ↓ scroll a bit, ← → and Page Up/Down a page, Shift+S closes it again.
             Column(
                 Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->

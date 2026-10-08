@@ -57,9 +57,18 @@ data class ExportedVariant(
     val progress: ReviewState? = null,
 )
 
-data class ImportResult(val library: Library, val progress: Progress, val added: Int, val updated: Int, val errors: List<String>) {
+data class ImportResult(
+    val library: Library,
+    val progress: Progress,
+    val added: Int,
+    val updated: Int,
+    val errors: List<String>,
+    /** Variants that were there before and are gone, when the file replaced everything. */
+    val removed: Int = 0,
+    val replaced: Boolean = false,
+) {
     fun summary(): String = buildString {
-        append("$added neu, $updated aktualisiert")
+        append(if (replaced) "$added geladen, $removed alte gelöscht" else "$added neu, $updated aktualisiert")
         if (errors.isNotEmpty()) append(", ${errors.size} übersprungen:\n" + errors.joinToString("\n"))
     }
 }
@@ -92,20 +101,32 @@ object Exchange {
             ),
         )
 
-    /**
-     * Adds the file's variants to [library]. A variant whose id already exists replaces it; its
-     * learning state is taken from the file, or dropped if the file has none and the moves changed.
-     */
-    fun import(text: String, library: Library, progress: Progress): ImportResult {
+    /** How many variants the export file [text] holds; throws [IllegalArgumentException] if it is none. */
+    fun variantsIn(text: String): Int = read(text).variants.size
+
+    private fun read(text: String): ExportFile {
         val file = try {
             json.decodeFromString<ExportFile>(text)
         } catch (e: Exception) {
             throw IllegalArgumentException("Keine gültige Export-Datei: ${e.message?.lineSequence()?.first()}")
         }
         require(file.format == ExportFile.FORMAT) { "Unbekanntes Format „${file.format}“" }
+        return file
+    }
 
-        var variants = library.variants
-        var cards = progress.cards
+    /**
+     * Adds the file's variants to [library]. A variant whose id already exists replaces it; its
+     * learning state is taken from the file, or dropped if the file has none and the moves changed.
+     *
+     * With [replace], the variants there were are deleted with their learning state, and only the
+     * file's are left (pins and playlists keep what is still there; notes and settings stay). A file
+     * without a single usable variant replaces nothing.
+     */
+    fun import(text: String, library: Library, progress: Progress, replace: Boolean = false): ImportResult {
+        val file = read(text)
+
+        var variants = if (replace) emptyList() else library.variants
+        var cards = if (replace) emptyMap() else progress.cards
         var added = 0
         var updated = 0
         val errors = mutableListOf<String>()
@@ -147,7 +168,19 @@ object Exchange {
                 else -> cards
             }
         }
-        return ImportResult(library.copy(variants = variants), progress.copy(cards = cards), added, updated, errors)
+        if (!replace) return ImportResult(library.copy(variants = variants), progress.copy(cards = cards), added, updated, errors)
+        require(variants.isNotEmpty()) {
+            "Die Datei hat keine brauchbare Variante – es wurde nichts ersetzt." + errors.joinToString("") { "\n$it" }
+        }
+        val ids = variants.map { it.id }.toSet()
+        val openings = variants.map(Library::openingOf).toSet()
+        val replaced = library.copy(
+            variants = variants,
+            pinned = library.pinned.filter { it in openings },
+            playlists = library.playlists.map { p -> p.copy(variantIds = p.variantIds.filter { it in ids }) },
+        )
+        val removed = library.variants.count { it.id !in ids }
+        return ImportResult(replaced, progress.copy(cards = cards), added, updated, errors, removed, replaced = true)
     }
 
     /** "1. e4 c5 2. Nf3", "1.e4 c5", "e2e4 c7c5" → UCI moves, counted from [from]. */

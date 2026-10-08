@@ -4,11 +4,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import repertoire.core.Cloze
 import repertoire.core.Drawing
 import repertoire.core.DrawingCheck
+import repertoire.core.EngineEntry
+import repertoire.core.EngineSession
+import repertoire.core.Explorer
+import repertoire.core.ExplorerResult
+import repertoire.core.ExplorerSource
 import repertoire.core.Exchange
 import repertoire.core.FilePicker
 import repertoire.core.Fsrs
@@ -34,6 +42,8 @@ import repertoire.core.Scheduler
 import repertoire.core.Stats
 import repertoire.core.Store
 import repertoire.core.Variant
+import repertoire.core.engineFilesIn
+import repertoire.core.launchEngine
 import repertoire.core.newId
 import repertoire.core.numberedSan
 import repertoire.core.toggle
@@ -141,8 +151,24 @@ class EditorState(
     /** Set while a playlist runs: at the end of the line the player goes on with the next variant. */
     val playlist: Playlist? = null,
     drawings: List<Drawing> = emptyList(),
+    /** Durchgehen: the line stays as it is; a different move on the board opens a [side] line instead. */
+    browse: Boolean = false,
 ) {
     var opening by mutableStateOf(opening)
+
+    /** Going through the line (Durchgehen) rather than changing it (Bearbeiten). */
+    var browsing by mutableStateOf(browse)
+
+    /**
+     * While going through: moves tried on the board that leave the line, from the position at
+     * [cursor] on; the line itself is untouched. Empty: on the line.
+     */
+    var side by mutableStateOf<List<Move>>(emptyList())
+
+    /** How many moves of [side] are on the board. */
+    var sideCursor by mutableIntStateOf(0)
+
+    val inSide: Boolean get() = side.isNotEmpty()
     var name by mutableStateOf(name)
 
     /** Arrows and circles saved with the variant; shown at their position, asked after the puzzle. */
@@ -195,8 +221,11 @@ class EditorState(
 
     val atEnd: Boolean get() = cursor >= moves.size
 
+    /** The moves on the board: the line up to [cursor], then those of a side line. */
+    val boardMoves: List<Move> get() = shown + side.take(sideCursor)
+
     /** Position shown on the board. */
-    val position: Position get() = shown.fold(start) { p, m -> p.play(m) }
+    val position: Position get() = boardMoves.fold(start) { p, m -> p.play(m) }
 
     /** Position the whole line leads to, the one that is trained. */
     val target: Position get() = moves.fold(start) { p, m -> p.play(m) }
@@ -213,8 +242,14 @@ class EditorState(
 
     val editedDrawing: Drawing? get() = drawingAt?.let(drawings::getOrNull)
 
-    /** The saved drawings at the position on the board. */
-    val drawingsHere: List<Drawing> get() = drawings.filter { it.ply == cursor }
+    /** The saved drawings at the position on the board; none in a side line, they belong to the line. */
+    val drawingsHere: List<Drawing> get() = if (inSide) emptyList() else drawings.filter { it.ply == cursor }
+
+    /** Back on the line, where the side line left it. */
+    fun leaveSide() {
+        side = emptyList()
+        sideCursor = 0
+    }
 
     /** The board plays moves again; a drawing left empty is dropped. */
     fun finishDrawing() {
@@ -245,6 +280,9 @@ class PasteState(
     /** Why the text could not be read, shown under the field. */
     var error by mutableStateOf<String?>(null)
 }
+
+/** The depths the engine can be stopped at, 0 first: no limit. */
+val ENGINE_DEPTHS = listOf(0, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40, 50)
 
 class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
     var library by mutableStateOf(store.loadLibrary())
@@ -403,6 +441,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 ?: run { flash = "Zeichnungen zum Abfragen entstehen im Editor (Durchgehen oder Bearbeiten)." }
             Command.CLEAR -> if (drawModeOnScreen != null) clearBoard() else flash = "Wegwischen geht, sobald ein Brett zu sehen ist."
             Command.COLORS -> colorsOpen = !colorsOpen
+            Command.EXPLORER -> explorerOpen = !explorerOpen
+            Command.ENGINE -> engineOpen = !engineOpen
+            Command.NOTES -> if (notesOf != null) notesOf = null else openNotes()
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
@@ -428,7 +469,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** The position on the board, wherever it is: in the editor (at the cursor) or in a puzzle (with a "@8." preview). */
     private fun boardLine(): BoardLine? {
         editor?.let { e ->
-            val numbered = e.positions.zip(e.moves).take(e.cursor).map { (before, move) -> numberedSan(before, move) }
+            val moves = e.boardMoves
+            val numbered = moves.runningFold(e.start) { p, m -> p.play(m) }.zip(moves).map { (before, move) -> numberedSan(before, move) }
             return BoardLine(e.startFen, numbered, e.position)
         }
         val attempt = session?.attempt ?: return null
@@ -490,6 +532,127 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
                 flash = (if (here) "Bis hier mit allem kopiert" else "PGN mit allem kopiert") +
                     " ($plies Halbzüge" + extras.joinToString("") { ", $it" } + ")."
             }
+        }
+    }
+
+    /** The position on the board right now, wherever it is; null without a board. */
+    val boardPosition: Position? get() = boardLine()?.position
+
+    // ---- lichess opening database (Ctrl+B l) ---------------------------------------------
+
+    /** The database window, beside whatever is open; it follows the board. */
+    var explorerOpen by mutableStateOf(false)
+
+    var explorerSource by mutableStateOf(ExplorerSource.MASTERS)
+
+    /** Where the database window was dragged to, from its place at the bottom right. */
+    val explorerAt = mutableStateOf(Offset.Zero)
+
+    /** Answers already fetched, so stepping back and forth asks lichess only once per position. */
+    private val explorerCache = mutableMapOf<Pair<ExplorerSource, String>, ExplorerResult>()
+
+    /** What the database knows about [fen]; throws [IllegalStateException] with a German explanation. */
+    suspend fun explore(source: ExplorerSource, fen: String): ExplorerResult =
+        explorerCache[source to fen] ?: Explorer.fetch(source, fen, library.settings.lichessToken).also { explorerCache[source to fen] = it }
+
+    /** A move clicked in the database or the engine's lines: played in the editor; a puzzle is not answered for you. */
+    fun playSuggested(uci: String) {
+        val e = editor
+        when {
+            e == null -> flash = "Vorgeschlagene Züge spielen geht im Editor (Durchgehen oder Bearbeiten)."
+            e.editedDrawing != null || e.drawMode.value -> flash = "Erst das Zeichnen beenden."
+            else -> editorPlay(Move.fromUci(uci))
+        }
+    }
+
+    fun setLichessToken(token: String) {
+        explorerCache.clear()
+        updateLibrary { it.copy(settings = it.settings.copy(lichessToken = token.trim())) }
+    }
+
+    // ---- Engines (Ctrl+B r) --------------------------------------------------------------
+
+    /** The engine window, beside whatever is open; it analyses the board as it changes. */
+    var engineOpen by mutableStateOf(false)
+
+    /** Where the engine window was dragged to, from its place at the bottom right. */
+    val engineAt = mutableStateOf(Offset.Zero)
+
+    /** Where engines can be put to be found: "Engines" in the data folder. */
+    val engineFolder: String get() = store.location.trimEnd('/', '\\') + "/Engines"
+
+    /** Programs in [engineFolder] that are not set up yet. */
+    fun enginesInFolder(): List<String> {
+        val known = library.settings.engines.map { it.path }.toSet()
+        return runCatching { engineFilesIn(engineFolder) }.getOrDefault(emptyList()).filter { it !in known }
+    }
+
+    /**
+     * Sets up the engine at [path]: it is started once to learn its name, which also proves it is
+     * a UCI engine. Throws [IllegalStateException] with a German explanation if not.
+     */
+    suspend fun addEngine(path: String) {
+        val clean = path.trim().removeSurrounding("\"").removeSurrounding("'")
+        check(clean.isNotEmpty()) { "Erst den Pfad zur Engine eintragen." }
+        check(library.settings.engines.none { it.path == clean }) { "Diese Engine ist schon eingerichtet." }
+        val session = EngineSession(launchEngine(clean))
+        val name = try {
+            withTimeout(10_000) { session.start(emptyMap()) }
+            session.name.ifBlank { clean.substringAfterLast('/') }
+        } catch (e: TimeoutCancellationException) {
+            throw IllegalStateException("Das Programm hat sich nicht als UCI-Engine gemeldet.")
+        } finally {
+            session.close()
+        }
+        updateLibrary { lib ->
+            val s = lib.settings
+            lib.copy(settings = s.copy(engines = s.engines + EngineEntry(name, clean), engine = s.engine.ifEmpty { clean }))
+        }
+    }
+
+    fun removeEngine(path: String) = updateLibrary { lib ->
+        val s = lib.settings
+        lib.copy(settings = s.copy(engines = s.engines.filter { it.path != path }, engine = if (s.engine == path) "" else s.engine))
+    }
+
+    fun chooseEngine(path: String) = updateLibrary { it.copy(settings = it.settings.copy(engine = path)) }
+
+    private fun updateEngine(path: String, transform: (EngineEntry) -> EngineEntry) = updateLibrary { lib ->
+        lib.copy(settings = lib.settings.copy(engines = lib.settings.engines.map { if (it.path == path) transform(it) else it }))
+    }
+
+    fun setEngineLines(path: String, n: Int) = updateEngine(path) { it.copy(lines = n.coerceIn(1, 5)) }
+
+    fun setEngineThreads(path: String, n: Int) = updateEngine(path) { it.copy(threads = n.coerceIn(1, 64)) }
+
+    fun setEngineHash(path: String, mb: Int) = updateEngine(path) { it.copy(hashMb = mb.coerceIn(16, 8192)) }
+
+    /** [ENGINE_DEPTHS] step by step; 0 is no limit. */
+    fun stepEngineDepth(path: String, by: Int) = updateEngine(path) { e ->
+        val i = ENGINE_DEPTHS.indexOf(e.depth).coerceAtLeast(0)
+        e.copy(depth = ENGINE_DEPTHS[(i + by).coerceIn(0, ENGINE_DEPTHS.lastIndex)])
+    }
+
+    // ---- Opening notes (Ctrl+B e) --------------------------------------------------------
+
+    /** The opening whose notes are open ([Library.GENERAL_NOTES] for the general ones); null when closed. */
+    var notesOf by mutableStateOf<String?>(null)
+
+    /** Opens the notes of the opening on screen: the editor's, the puzzle's, otherwise the general ones. */
+    fun openNotes() {
+        val opening = editor?.opening?.trim()?.takeIf { it.isNotEmpty() }
+            ?: session?.attempt?.quiz?.variant?.let(Library::openingOf)
+        notesOf = opening ?: Library.GENERAL_NOTES
+    }
+
+    /** What to pick from in the notes: the general ones, every opening, and those with notes but no variants any more. */
+    val notesOpenings: List<String>
+        get() = (listOf(Library.GENERAL_NOTES) + library.groups().map { it.opening } + library.notes.keys + listOfNotNull(notesOf)).distinct()
+
+    fun saveNotes(opening: String, text: String) {
+        if ((library.notes[opening] ?: "") == text.trimEnd()) return
+        updateLibrary { lib ->
+            lib.copy(notes = if (text.isBlank()) lib.notes - opening else lib.notes + (opening to text.trimEnd()))
         }
     }
 
@@ -646,10 +809,14 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     /** Opens a saved variant; [fromStart] puts the board at move zero to step through the line. */
-    fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false, playlist: Playlist? = null) {
+    /**
+     * Opens a saved variant; [fromStart] puts the board at move zero to step through the line.
+     * [browse] (Durchgehen, the default from the start or playing): the moves stay as they are.
+     */
+    fun editVariant(v: Variant, fromStart: Boolean = false, play: Boolean = false, playlist: Playlist? = null, browse: Boolean = fromStart || play) {
         editor = EditorState(
             v.id, v.opening, v.name, v.moves.map(Move::fromUci), v.playWhite, v.theory, fromStart || play, v.startFen,
-            playlist = playlist, drawings = v.drawings,
+            playlist = playlist, drawings = v.drawings, browse = browse,
         )
         if (play) editor?.playing = v.moves.isNotEmpty()
     }
@@ -659,6 +826,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val e = editor ?: return
         val p = e.playlist
         e.finishDrawing()
+        // The player plays the line, not a side line.
+        e.leaveSide()
         when {
             e.playing -> e.playing = false
             e.moves.isEmpty() -> Unit
@@ -695,27 +864,82 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     }
 
     /**
-     * A move on the board. At the end of the line it is appended; in the middle, the same move just
-     * walks on, and a different one replaces the rest of the line from here.
+     * A move on the board. Bearbeiten: at the end of the line it is appended; in the middle, the same
+     * move just walks on, and a different one replaces the rest of the line from here. Durchgehen:
+     * the same move walks on, a different one goes into a side line and the line stays.
      */
     fun editorPlay(move: Move) {
         val e = editor ?: return
         e.playing = false
+        if (e.browsing) {
+            when {
+                // Back onto the line from the start of a side line.
+                e.sideCursor == 0 && e.moves.getOrNull(e.cursor) == move -> {
+                    e.leaveSide()
+                    e.cursor++
+                }
+                e.side.getOrNull(e.sideCursor) == move -> e.sideCursor++
+                else -> {
+                    e.finishDrawing()
+                    e.side = e.side.take(e.sideCursor) + move
+                    e.sideCursor++
+                }
+            }
+            return
+        }
         if (e.moves.getOrNull(e.cursor) != move) e.moves = e.shown + move
         e.cursor++
     }
 
-    /** Puts the board [index] moves into the line; the moves themselves stay. */
+    /** Puts the board [index] moves into the line; the moves themselves stay, a side line goes. */
     fun editorGoTo(index: Int) {
         val e = editor ?: return
         e.playing = false
         e.finishDrawing()
+        e.leaveSide()
         e.cursor = index.coerceIn(0, e.moves.size)
     }
 
-    fun editorStepBack() = editorGoTo((editor?.cursor ?: 0) - 1)
+    /** One move back: in a side line within it, and from its first move back onto the line. */
+    fun editorStepBack() {
+        val e = editor ?: return
+        if (e.inSide && e.sideCursor > 0) {
+            e.playing = false
+            e.sideCursor--
+        } else {
+            editorGoTo(e.cursor - if (e.inSide) 0 else 1)
+        }
+    }
 
-    fun editorStepForward() = editorGoTo((editor?.cursor ?: 0) + 1)
+    /** One move on: in a side line along it, otherwise along the line. */
+    fun editorStepForward() {
+        val e = editor ?: return
+        if (e.inSide) {
+            e.playing = false
+            e.sideCursor = (e.sideCursor + 1).coerceAtMost(e.side.size)
+        } else {
+            editorGoTo(e.cursor + 1)
+        }
+    }
+
+    /** Ctrl+B Enter: from a side line back to the line, where it was left. */
+    fun backToLine() {
+        val e = editor
+        when {
+            e == null || !e.inSide -> flash = "Kein Nebenstrang offen – du bist auf der Variante."
+            else -> {
+                e.leaveSide()
+                flash = "Zurück auf der Variante."
+            }
+        }
+    }
+
+    /** From Durchgehen to Bearbeiten: the moves can be changed from now on; a side line is dropped. */
+    fun editorStartEditing() {
+        val e = editor ?: return
+        e.leaveSide()
+        e.browsing = false
+    }
 
     fun editorToEnd() = editorGoTo(editor?.moves?.size ?: 0)
 
@@ -762,6 +986,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** A new drawing at the position on the board; the board draws into it until [editorFinishDrawing]. */
     fun editorNewDrawing() {
         val e = editor ?: return
+        if (e.inSide) {
+            flash = "Zeichnungen gehören zur Variante – erst mit Strg+B Enter zurück."
+            return
+        }
         e.playing = false
         e.finishDrawing()
         e.drawMode.value = false
@@ -775,6 +1003,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val d = e.drawings.getOrNull(index) ?: return
         // Finishing the one being drawn may drop it, which shifts the others.
         e.finishDrawing()
+        e.leaveSide()
         e.playing = false
         e.drawMode.value = false
         e.cursor = d.ply
@@ -1468,20 +1697,45 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         }
     }
 
-    /** Adds the variants of an exported file; same id means the same variant, which is replaced. */
+    /** An export file that was opened, waiting for the choice to add it or to replace everything with it. */
+    var importing by mutableStateOf<PendingImport?>(null)
+        private set
+
+    class PendingImport(val text: String, val variants: Int)
+
+    /** Opens an exported file and asks how to take it in ([finishImport]). */
     fun import() {
         val picker = files ?: return
         picker.open { text ->
             if (text == null) return@open
-            message = try {
-                val result = Exchange.import(text, library, progress)
-                updateLibrary { result.library }
-                saveProgress(result.progress)
-                "Importiert: " + result.summary()
+            try {
+                importing = PendingImport(text, Exchange.variantsIn(text))
             } catch (e: IllegalArgumentException) {
-                "Import fehlgeschlagen: ${e.message}"
+                message = "Import fehlgeschlagen: ${e.message}"
             }
         }
+    }
+
+    /**
+     * Takes in the opened file. Normally its variants are added, and one with the same id replaces
+     * the old one; with [replace], all variants there were are deleted and only the file's are left.
+     */
+    fun finishImport(replace: Boolean) {
+        val text = importing?.text ?: return
+        importing = null
+        message = try {
+            val result = Exchange.import(text, library, progress, replace)
+            updateLibrary { result.library }
+            saveProgress(result.progress)
+            selected = selected?.filter { id -> library.variants.any { it.id == id } }?.toSet()
+            (if (replace) "Ersetzt: " else "Importiert: ") + result.summary()
+        } catch (e: IllegalArgumentException) {
+            "Import fehlgeschlagen: ${e.message}"
+        }
+    }
+
+    fun cancelImport() {
+        importing = null
     }
 
     private fun fileSafe(s: String) =

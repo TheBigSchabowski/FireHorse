@@ -87,6 +87,10 @@ installieren“ erlauben.
   mit Stift 2, Alt mit 3, beide mit 4. Die Farbe jedes Stifts ist frei wählbar (`Strg+B k` oder
   Einstellungen → Konfiguration → Brett → Zeichenfarben): aus 16 Farben oder als eigener Code mit
   Namen, z. B. `#7FFFD4` „Aquamarin“. Schon Gezeichnetes nimmt die neue Farbe an.
+- **Durchgehen, Bearbeiten, Üben** sind drei Modi: „Durchgehen“ (und Abspielen, Playlists) lässt die Züge der Variante,
+  wie sie sind – ein anderer Zug auf dem Brett öffnet einen Nebenstrang nur zum Anschauen, `Strg+B Enter` (oder
+  „↩ Zurück zur Variante“) führt zurück, „Züge bearbeiten“ wechselt ins Bearbeiten. „Bearbeiten“ ändert die Züge:
+  ein anderer Zug ersetzt ab dort den Rest. „Üben“ fragt die Variante als Puzzle ab.
 - **Zeichnungen zum Abfragen:** im Editor legt „+ Zeichnung hier“ (oder `Strg+B n`) an der Stellung auf dem Brett eine
   Zeichnung an, die mit der Variante gespeichert wird (blauer Rahmen: Antippen kreist ein, Ziehen malt
   einen Pfeil), dazu optional eine Frage oder ein Name. Beim Durchgehen und Abspielen ist sie blau zu
@@ -135,6 +139,9 @@ oder ganz ausschalten.
 | `Strg+B p` | Kürzel-Liste antippen | Alles kopieren: die ganze Variante als PGN mit Eröffnung, Name, Theorie und Zeichnungen (als `[%cal]`/`[%csl]` wie bei lichess) |
 | `Strg+B o` | Kürzel-Liste antippen | Alles bis zur Stellung kopieren: Züge und Zeichnungen bis zum Brett, die Theorie ganz |
 | `Strg+B d` | Kürzel-Liste antippen | PGN mit allem einfügen: Züge, Namen, Theorie und Zeichnungen kommen zurück (auch aus lichess) |
+| `Strg+B l` | Kürzel-Liste antippen | lichess-Eröffnungsdatenbank zur Stellung auf dem Brett (Meister oder lichess); ein Klick auf einen Zug spielt ihn im Editor |
+| `Strg+B e` | Kürzel-Liste antippen | Eröffnungsnotizen: eigene Notizen zur offenen Eröffnung, oder „Allgemein“ |
+| `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung (nur am Computer) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
@@ -158,6 +165,24 @@ zurück. Auch diese Tasten lassen sich unter Konfiguration → Tastenkürzel umb
 Das geht auch mitten in einem Puzzle: die neue Variante legt sich darüber, nach Speichern oder
 Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wird dabei nie
 überschrieben.
+
+**lichess-Datenbank:** lichess gibt sie nur mit einem persönlichen API-Schlüssel heraus. Auf
+<https://lichess.org/account/oauth/token> einen neuen anlegen (kein Häkchen nötig) und unter
+Einstellungen → Konfiguration → lichess einfügen. Jeder nimmt seinen eigenen; er bleibt auf dem Gerät
+und kommt nicht mit in Exporte.
+
+**Engines:** FireHorse lädt keine Engine herunter und fragt nichts im Netz außer der lichess-Datenbank.
+Unter Einstellungen → Konfiguration → Engines den Pfad zu einer UCI-Engine angeben, die schon auf dem
+Computer ist (z. B. Stockfish; die von En Croissant liegt am Mac unter
+`~/Library/Application Support/org.encroissant.app/engines/stockfish/stockfish-macos-universal`), oder die
+Datei in den Ordner `Engines` im Datenordner legen – dann steht sie dort zum Hinzufügen. Mehrere Engines
+lassen sich einrichten und wählen; jede hat ihre eigenen Linien, Tiefe (unbegrenzt oder fest), Threads und Hash. Test gegen eine echte Engine:
+`FIREHORSE_TEST_ENGINE=/pfad/zu/stockfish ./gradlew :shared:desktopTest`.
+
+**Importieren** (Einstellungen → Konfiguration → Daten) fragt nach dem Öffnen der Datei: **Dazunehmen**
+– die Varianten der Datei kommen dazu, vorhandene mit gleicher Id werden aktualisiert, alles andere bleibt –
+oder **Ersetzen** – alle eigenen Varianten werden mit Lernstand gelöscht und nur die aus der Datei geladen
+(Notizen, Einstellungen und Playlists bleiben). Eine Datei ohne brauchbare Variante ersetzt nichts.
 
 Gespeichert wird am Mac in `~/Documents/EroeffnungsPuzzle`, unter Linux im Dokumente-Ordner des Benutzers
 (`~/Dokumente/EroeffnungsPuzzle`, je nach Sprache `~/Documents/...`; maßgeblich ist `XDG_DOCUMENTS_DIR`

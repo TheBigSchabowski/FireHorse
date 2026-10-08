@@ -47,6 +47,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.RadioButton
+import repertoire.core.EngineEntry
+import repertoire.core.Explorer
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -86,6 +93,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
     TAP_ZONES("Doppeltippen", "Bereiche des Bildschirms für Kürzel, Raster frei wählbar", touch = true),
     KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
+    LICHESS("Datenbank, Engine und Notizen", "lichess-Eröffnungsdatenbank, Engines wie Stockfish, eigene Eröffnungsnotizen"),
     DATA("Speichern und Übertragen", "Wo alles liegt, Export und Import"),
     ;
 
@@ -158,6 +166,14 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean, scrollTo: suspend (Layo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Nach dem letzten Zug von vorn beginnen", modifier = Modifier.weight(1f))
             Switch(settings.playLoop, onCheckedChange = vm::setPlayLoop)
+        }
+    }
+    Section("lichess", onHelp = { vm.openHelp(HelpTopic.LICHESS) }) {
+        LichessToken(vm, settings.lichessToken)
+    }
+    if (!touch) {
+        Section("Engines", onHelp = { vm.openHelp(HelpTopic.LICHESS) }) {
+            EngineSettings(vm, settings)
         }
     }
     Section("Brett", onHelp = { vm.openHelp(HelpTopic.BOARD) }) {
@@ -269,7 +285,163 @@ private fun ConfigPage(vm: AppViewModel, touch: Boolean, scrollTo: suspend (Layo
                 Spacer(Modifier.height(6.dp))
                 Text(it, style = MaterialTheme.typography.bodyMedium)
             }
+            vm.importing?.let { ImportChoice(vm, it, vm.library.variants.size) }
         }
+    }
+}
+
+/** After a file is opened: add its variants to the ones there are, or delete those and keep only the file's. */
+@Composable
+private fun ImportChoice(vm: AppViewModel, file: AppViewModel.PendingImport, have: Int) {
+    AlertDialog(
+        onDismissRequest = vm::cancelImport,
+        title = { Text("Importieren") },
+        text = {
+            Column {
+                Text("Die Datei hat ${file.variants} Variante(n). Du hast gerade $have.")
+                Spacer(Modifier.height(10.dp))
+                Text("Dazunehmen", fontWeight = FontWeight.Bold)
+                Hint("Die Varianten der Datei kommen dazu, deine bleiben. Eine, die es schon gibt, wird aktualisiert.")
+                Spacer(Modifier.height(8.dp))
+                Text("Ersetzen", fontWeight = FontWeight.Bold, color = Color(0xFFE57373))
+                Hint(
+                    "Alle deine Varianten werden mit ihrem Lernstand gelöscht, danach gibt es nur noch die aus der Datei. " +
+                        "Notizen, Einstellungen und Playlists bleiben (Playlists ohne die gelöschten Varianten).",
+                )
+            }
+        },
+        confirmButton = { Button(onClick = { vm.finishImport(replace = false) }) { Text("Dazunehmen") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = vm::cancelImport) { Text("Abbrechen") }
+                TextButton(onClick = { vm.finishImport(replace = true) }) { Text("Ersetzen", color = Color(0xFFE57373)) }
+            }
+        },
+    )
+}
+
+/** The personal lichess API token for the opening database, hidden unless asked to show it. */
+@Composable
+private fun LichessToken(vm: AppViewModel, saved: String) {
+    var text by remember { mutableStateOf(saved) }
+    var shown by remember { mutableStateOf(false) }
+    Hint(
+        "Für die Eröffnungsdatenbank (" + (if (LocalTouch.current) "Kürzel „Datenbank“" else vm.library.settings.shortcutLabel(Command.EXPLORER)) +
+            ") will lichess einen persönlichen API-Schlüssel. Auf ${Explorer.TOKEN_PAGE} einen neuen anlegen – kein Häkchen nötig – und hier einfügen. " +
+            "Er bleibt auf diesem Gerät und kommt nicht mit in Exporte.",
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        text,
+        {
+            text = it
+            vm.setLichessToken(it)
+        },
+        label = { Text("API-Schlüssel (lip_…)") },
+        singleLine = true,
+        visualTransformation = if (shown) VisualTransformation.None else PasswordVisualTransformation(),
+        modifier = Modifier.typing(vm).fillMaxWidth().onPreviewKeyEvent(vm.shortcutKeys::handle),
+    )
+    TextButton(onClick = { shown = !shown }, enabled = text.isNotEmpty()) { Text(if (shown) "Verbergen" else "Anzeigen") }
+}
+
+/**
+ * The engines on this computer: those set up, those lying in the engine folder, a path to add one,
+ * and how hard they work. Nothing is downloaded; an engine is whatever UCI program is given.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EngineSettings(vm: AppViewModel, settings: Settings) {
+    val scope = rememberCoroutineScope()
+    var path by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    fun add(p: String) {
+        busy = true
+        error = null
+        scope.launch {
+            try {
+                vm.addEngine(p)
+                path = ""
+            } catch (e: IllegalStateException) {
+                error = e.message
+            } finally {
+                busy = false
+            }
+        }
+    }
+    Hint(
+        "Eine Engine ist ein UCI-Programm auf diesem Computer, z. B. Stockfish. Gib den Pfad zur Programmdatei an " +
+            "oder leg sie in den Ordner ${vm.engineFolder} – dann steht sie hier zum Hinzufügen. " +
+            "${settings.shortcutLabel(Command.ENGINE)} lässt die gewählte Engine die Stellung auf dem Brett rechnen.",
+    )
+    Spacer(Modifier.height(8.dp))
+    val chosen = settings.chosenEngine
+    for (e in settings.engines) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = e == chosen, onClick = { vm.chooseEngine(e.path) })
+            Column(Modifier.weight(1f)) {
+                Text(e.name)
+                Hint(e.path)
+            }
+            TextButton(onClick = { vm.removeEngine(e.path) }) { Text("Entfernen") }
+        }
+        // Each engine works its own way; the chosen one shows how.
+        if (e == chosen) EngineOptions(vm, e)
+    }
+    val found = remember(settings.engines) { vm.enginesInFolder() }
+    for (f in found) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Im Ordner: " + f.substringAfterLast('/'))
+                Hint(f)
+            }
+            TextButton(onClick = { add(f) }, enabled = !busy) { Text("Hinzufügen") }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            path,
+            {
+                path = it
+                error = null
+            },
+            label = { Text("Pfad zur Engine") },
+            placeholder = { Text("/Pfad/zu/stockfish") },
+            singleLine = true,
+            isError = error != null,
+            modifier = Modifier.typing(vm).weight(1f).onPreviewKeyEvent(vm.shortcutKeys::handle),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(onClick = { add(path) }, enabled = path.isNotBlank() && !busy) { Text(if (busy) "Prüfe …" else "Hinzufügen") }
+    }
+    error?.let { Text(it, color = Color(0xFFE57373), style = MaterialTheme.typography.bodyMedium) }
+}
+
+/** How hard one engine works: lines, depth, threads, hash. */
+@Composable
+private fun EngineOptions(vm: AppViewModel, e: EngineEntry) {
+    Column(Modifier.padding(start = 48.dp, bottom = 12.dp)) {
+        Text("Linien")
+        Stepper("${e.lines}", onMinus = { vm.setEngineLines(e.path, e.lines - 1) }, onPlus = { vm.setEngineLines(e.path, e.lines + 1) },
+            minusEnabled = e.lines > 1, plusEnabled = e.lines < 5)
+        Spacer(Modifier.height(8.dp))
+        Text("Tiefe")
+        Stepper(
+            if (e.depth == 0) "unbegrenzt" else "${e.depth}",
+            onMinus = { vm.stepEngineDepth(e.path, -1) }, onPlus = { vm.stepEngineDepth(e.path, 1) },
+            minusEnabled = e.depth != 0, plusEnabled = e.depth != ENGINE_DEPTHS.last(),
+        )
+        Hint("Unbegrenzt rechnet die Engine weiter, bis sich die Stellung ändert; mit einer Tiefe hört sie dort auf und die Linien bleiben stehen.")
+        Spacer(Modifier.height(8.dp))
+        Text("Threads (Prozessorkerne)")
+        Stepper("${e.threads}", onMinus = { vm.setEngineThreads(e.path, e.threads - 1) }, onPlus = { vm.setEngineThreads(e.path, e.threads + 1) },
+            minusEnabled = e.threads > 1)
+        Spacer(Modifier.height(8.dp))
+        Text("Hash (Speicher)")
+        Stepper("${e.hashMb} MB", onMinus = { vm.setEngineHash(e.path, e.hashMb / 2) }, onPlus = { vm.setEngineHash(e.path, e.hashMb * 2) },
+            minusEnabled = e.hashMb > 16, plusEnabled = e.hashMb < 8192)
     }
 }
 
@@ -451,7 +623,12 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
         HelpTopic.VARIANTS -> {
             Bullet("+ Neue Variante", "Züge vom Start bis zur Stellung spielen, Eröffnung und Namen eintragen, die Farbe wählen, mit der du spielst, speichern.")
             Bullet("Weiterführen", "übernimmt die Züge einer vorhandenen Variante, dann hängst du nur noch an, was anders ist.")
-            Bullet("Durchgehen", "öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶| oder einem Tipp auf einen Zug in der Liste gehst du die Züge durch – nichts wird dabei gelöscht.")
+            Bullet(
+                "Durchgehen",
+                "öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶| oder einem Tipp auf einen Zug in der Liste gehst du die Züge durch – die Variante bleibt dabei, wie sie ist. " +
+                    "Ein anderer Zug auf dem Brett öffnet einen Nebenstrang nur zum Anschauen; „↩ Zurück zur Variante“" +
+                    (if (touch) "" else " oder Strg+B Enter") + " führt zurück, „Züge bearbeiten“ wechselt ins Bearbeiten.",
+            )
             Bullet("Bearbeiten", "dasselbe Brett, nur gleich bei der Endstellung. Ein anderer Zug mitten in der Variante ersetzt ab dort den Rest, „Ab hier kürzen“ wirft ihn ohne Ersatz weg, „Zug zurück“ nimmt den letzten zurück.")
             Para("Geänderte Züge sind ein neues Puzzle: der Lernstand dieser Variante fängt von vorn an.")
             Para(
@@ -635,11 +812,51 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             SubHeading("Weitere Tasten")
             for ((keys, label) in OTHER_KEYS) ShortcutRow(keys, label, null)
         }
+        HelpTopic.LICHESS -> {
+            val db = if (touch) "das Kürzel „Datenbank“" else settings.shortcutLabel(Command.EXPLORER)
+            val notes = if (touch) "das Kürzel „Notizen“" else settings.shortcutLabel(Command.NOTES)
+            SubHeading("Eröffnungsdatenbank")
+            Para(
+                "$db öffnet neben dem Brett lichess' Eröffnungsdatenbank für die Stellung, die gerade auf dem Brett steht: " +
+                    "jeder Zug, der dort gespielt wurde, wie oft, und wie die Partien ausgingen (weiß · remis · schwarz). " +
+                    "„Meister“ sind Partien starker Spieler über dem Brett, „lichess“ Online-Partien ab 1600 (Blitz und langsamer). " +
+                    "Das Fenster geht mit dem Brett mit, ein Klick auf einen Zug spielt ihn im Editor. Nochmal $db schließt es.",
+            )
+            Para(
+                "lichess gibt die Datenbank nur mit einem persönlichen API-Schlüssel heraus: auf ${Explorer.TOKEN_PAGE} einen neuen anlegen " +
+                    "(kein Häkchen nötig) und in der Konfiguration unter „lichess“ einfügen. Jeder nimmt seinen eigenen; er bleibt auf dem Gerät.",
+            )
+            ConfigButton(vm, "Schlüssel eintragen")
+            if (!touch) {
+                SubHeading("Engine")
+                Para(
+                    "${settings.shortcutLabel(Command.ENGINE)} lässt eine Engine auf diesem Computer die Stellung auf dem Brett rechnen: die besten Linien " +
+                        "mit Bewertung aus Sicht von Weiß (+0,31 heißt Weiß steht etwas besser, #3 Matt in drei), immer tiefer, bis sich die Stellung ändert. " +
+                        "Ein Klick auf eine Linie spielt ihren ersten Zug im Editor.",
+                )
+                Para(
+                    "FireHorse lädt keine Engine herunter. Unter Konfiguration → Engines gibst du den Pfad zu einer UCI-Engine an, " +
+                        "die schon auf dem Computer ist (z. B. die Stockfish-Datei, die En Croissant installiert hat), oder legst sie in den Ordner " +
+                        "${vm.engineFolder}. Mehrere Engines lassen sich einrichten und wählen; jede hat ihre eigenen Linien, Tiefe, Threads und Hash " +
+                        "– „unbegrenzt“ rechnet immer weiter, eine feste Tiefe hält dort an.",
+                )
+            }
+            SubHeading("Eröffnungsnotizen")
+            Para(
+                "$notes öffnet deine Notizen zur Eröffnung, die gerade offen ist – Pläne, typische Fallen, was für die ganze Eröffnung gilt. " +
+                    "Oben wechselst du zu einer anderen Eröffnung oder zu „Allgemein“ für alles, was zu keiner bestimmten gehört. " +
+                    "Gespeichert wird beim Wechseln und beim Schließen.",
+            )
+        }
         HelpTopic.DATA -> {
             Para("Alles wird nach jeder Änderung und jeder Antwort sofort gespeichert, in: ${vm.dataLocation}")
             if (vm.canTransfer) {
                 Bullet("Alle exportieren", "schreibt Varianten und Lernstand in eine .json-Datei, z. B. um sie vom Computer aufs Handy zu bringen. „Exportieren“ bei einer Eröffnung auf der Startseite nimmt nur diese.")
-                Bullet("Importieren", "holt eine solche Datei herein: neue Varianten kommen dazu, vorhandene werden aktualisiert.")
+                Bullet(
+                    "Importieren",
+                    "holt eine solche Datei herein. Danach fragt FireHorse: „Dazunehmen“ – neue Varianten kommen dazu, vorhandene werden aktualisiert, " +
+                        "deine anderen bleiben. „Ersetzen“ – alle deine Varianten werden mit Lernstand gelöscht und nur die aus der Datei geladen.",
+                )
             }
             if (touch) Para("Achtung: Deinstallieren löscht den App-Speicher und damit den Lernstand. Vorher exportieren.")
             ConfigButton(vm, "Zu Export und Import")

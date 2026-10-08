@@ -26,14 +26,25 @@ fun main() {
     val out = File("build/screens").apply { mkdirs() }
     val sizes = mapOf("phone" to (393 to 852), "desktop" to (1200 to 820))
 
-    fun render(name: String, setup: (AppViewModel) -> Unit) {
-        for ((label, size) in sizes) {
+    fun render(
+        name: String,
+        waitMs: Long = 0,
+        only: Map<String, Pair<Int, Int>> = sizes,
+        files: repertoire.core.FilePicker? = null,
+        setup: (AppViewModel) -> Unit,
+    ) {
+        for ((label, size) in only) {
             val dir = Files.createTempDirectory("puzzle").toFile()
-            val vm = AppViewModel(Store(DirectoryStore(dir))).also(setup)
+            val vm = AppViewModel(Store(DirectoryStore(dir)), files).also(setup)
             val (w, h) = size
             ImageComposeScene(w * 2, h * 2, Density(2f)) { App(vm, touch = label == "phone") }.use { scene ->
                 // Images load on the first frames; render a few before taking the picture.
                 repeat(5) { scene.render(it * 20_000_000L) }
+                // Something that runs outside (an engine) gets real time to answer.
+                if (waitMs > 0) repeat(10) {
+                    Thread.sleep(waitMs / 10)
+                    scene.render(100_000_000L + it * 10_000_000L)
+                }
                 val png = scene.render(200_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
                 File(out, "$name-$label.png").writeBytes(png)
             }
@@ -159,6 +170,48 @@ fun main() {
         vm.setPasteText("r1bqkb1r/1p2pppp/p1np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 7")
         vm.applyPaste()
     }
+    render("datenbank") { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.first(), fromStart = true)
+        repeat(4) { vm.editorStepForward() }
+        vm.run(Command.EXPLORER)
+    }
+    render("durchgehen-nebenstrang") { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.first(), fromStart = true)
+        repeat(5) { vm.editorStepForward() }
+        for (san in listOf("Nc6", "Nc3", "g6")) vm.editorPlay(vm.editor!!.position.parseSan(san)!!)
+    }
+    render("notizen") { vm ->
+        vm.sample()
+        vm.saveNotes(repertoire.core.Library.GENERAL_NOTES, "Erst entwickeln, dann angreifen.")
+        vm.saveNotes("Sizilianisch", "Gegen f3 (English Attack): ...e6, ...b5, ...h5 nicht vergessen.\nTypischer Plan: Damenflügel-Angriff.")
+        vm.editVariant(vm.library.variants.first())
+        vm.run(Command.NOTES)
+    }
+    render("einfuegen-alles") { vm ->
+        vm.sample()
+        vm.run(Command.PASTE_ALL)
+    }
+    // Only with an engine to show: FIREHORSE_TEST_ENGINE=/path/to/stockfish
+    System.getenv("FIREHORSE_TEST_ENGINE")?.takeIf { it.isNotBlank() }?.let { engine ->
+        render("engine", waitMs = 3000) { vm ->
+            vm.sample()
+            kotlinx.coroutines.runBlocking { vm.addEngine(engine) }
+            vm.editVariant(vm.library.variants.first(), fromStart = true)
+            repeat(6) { vm.editorStepForward() }
+            vm.run(Command.ENGINE)
+            vm.run(Command.EXPLORER)
+        }
+        // Tall, so the engines further down the configuration are in the picture.
+        render("einstellungen-engines", only = mapOf("desktop" to (1200 to 2300))) { vm ->
+            vm.sample()
+            kotlinx.coroutines.runBlocking { vm.addEngine(engine) }
+            vm.stepEngineDepth(engine, 6)
+            vm.openKeys(null)
+            vm.showKeys = false
+        }
+    }
     render("kuerzel") { vm ->
         vm.sample()
         vm.run(Command.SHORTCUTS)
@@ -177,6 +230,18 @@ fun main() {
     render("einstellungen") { vm ->
         vm.sample()
         vm.openConfig()
+    }
+    // A file opened for importing: add it, or replace everything with it.
+    val exported = object : repertoire.core.FilePicker {
+        override fun save(suggestedName: String, text: String, onDone: (String?) -> Unit) = onDone(null)
+        override fun open(onDone: (String?) -> Unit) = onDone(
+            """{"format": "eroeffnungs-puzzle", "variants": [{"name": "Alapin", "opening": "Sizilianisch", "moves": "e4 c5 c3"}]}""",
+        )
+    }
+    render("import-auswahl", files = exported) { vm ->
+        vm.sample()
+        vm.openConfig()
+        vm.import()
     }
     render("abspielen") { vm ->
         vm.sample()

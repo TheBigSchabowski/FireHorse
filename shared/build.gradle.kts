@@ -35,6 +35,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // runTest for the engine session; the same version Compose brings along.
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
         }
         // Skia for the tests that feed taps into an off-screen Compose scene.
         named("desktopTest").dependencies {

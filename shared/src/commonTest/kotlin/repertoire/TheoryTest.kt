@@ -6,12 +6,14 @@ import repertoire.core.Fsrs
 import repertoire.core.Grade
 import repertoire.core.Library
 import repertoire.core.Progress
+import repertoire.core.SavedPlaylist
 import repertoire.core.TheoryPart
 import repertoire.core.Variant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -93,5 +95,43 @@ class TheoryTest {
         assertTrue("e4" in result.errors.single())
 
         assertFailsWith<IllegalArgumentException> { Exchange.import("{\"format\": \"anki\"}", Library(), Progress()) }
+    }
+    @Test
+    fun importCanReplaceEverything() {
+        val mine = Variant("mine", "Französisch", "Vorstoß", Exchange.parseMoves("e4 e6 d4 d5 e5"))
+        val both = Variant("both", "Sizilianisch", "Offen", Exchange.parseMoves("e4 c5"))
+        val library = Library(
+            listOf(mine, both),
+            pinned = listOf("Französisch", "Sizilianisch"),
+            playlists = listOf(SavedPlaylist("p", "Mix", listOf("mine", "both"))),
+            notes = mapOf("Französisch" to "c5 schlagen"),
+        )
+        val progress = Progress(cards = mapOf("mine" to Fsrs.review(null, Grade.GOOD), "both" to Fsrs.review(null, Grade.GOOD)))
+        val text = """
+            {"format": "eroeffnungs-puzzle", "variants": [
+              {"id": "both", "opening": "Sizilianisch", "name": "Offen", "moves": "e4 c5 Nf3"},
+              {"id": "new", "opening": "Sizilianisch", "name": "Alapin", "moves": "e4 c5 c3"}
+            ]}
+        """
+        assertEquals(2, Exchange.variantsIn(text))
+
+        // Normally the file's variants come in beside the ones there are.
+        val added = Exchange.import(text, library, progress)
+        assertEquals(listOf("mine", "both", "new"), added.library.variants.map { it.id })
+        assertNotNull(added.progress.cards["mine"])
+
+        // Replacing leaves only the file's, without the old learning state.
+        val replaced = Exchange.import(text, library, progress, replace = true)
+        assertEquals(listOf("both", "new"), replaced.library.variants.map { it.id })
+        assertEquals(emptyMap(), replaced.progress.cards)
+        assertEquals(listOf("Sizilianisch"), replaced.library.pinned)
+        assertEquals(listOf("both"), replaced.library.playlists.single().variantIds)
+        assertEquals(library.notes, replaced.library.notes)
+        assertEquals(1, replaced.removed)
+        assertEquals("2 geladen, 1 alte gelöscht", replaced.summary())
+
+        // A file with nothing usable in it must not wipe the library.
+        val broken = """{"format": "eroeffnungs-puzzle", "variants": [{"name": "Kaputt", "moves": "e4 e4"}]}"""
+        assertFailsWith<IllegalArgumentException> { Exchange.import(broken, library, progress, replace = true) }
     }
 }

@@ -55,6 +55,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             when {
                 playlist != null -> "Playlist: ${playlist.title} · ${playlist.index + 1} von ${playlist.ids.size}"
                 e.editingId == null -> "Neue Variante"
+                e.browsing -> "Variante durchgehen"
                 else -> "Variante bearbeiten"
             },
             style = MaterialTheme.typography.titleLarge,
@@ -79,7 +80,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
                 ChessBoard(
                     position = position,
                     whiteBottom = e.playWhite != vm.editorFlipped,
-                    lastMove = e.shown.lastOrNull(),
+                    lastMove = e.boardMoves.lastOrNull(),
                     marks = emptyMap(),
                     interactive = true,
                     onMove = vm::editorPlay,
@@ -101,7 +102,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { vm.editorGoTo(0) }, enabled = e.cursor > 0) { Text("|◀") }
                 OutlinedButton(onClick = vm::editorStepBack, enabled = e.cursor > 0) { Text("◀") }
-                OutlinedButton(onClick = vm::editorStepForward, enabled = !e.atEnd) { Text("▶") }
+                OutlinedButton(onClick = vm::editorStepForward, enabled = if (e.inSide) e.sideCursor < e.side.size else !e.atEnd) { Text("▶") }
                 OutlinedButton(onClick = vm::editorToEnd, enabled = !e.atEnd) { Text("▶|") }
             }
             Spacer(Modifier.height(8.dp))
@@ -109,6 +110,8 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             Spacer(Modifier.height(4.dp))
             Text(
                 when {
+                    e.browsing -> "Zug ${e.cursor} von ${e.moves.size}. Durchgehen: ein anderer Zug auf dem Brett öffnet einen Nebenstrang, " +
+                        "die Variante bleibt, wie sie ist."
                     !e.atEnd -> "Zug ${e.cursor} von ${e.moves.size}. Ein anderer Zug auf dem Brett ersetzt ab hier den Rest."
                     e.setUp -> "Spiele auf dem Brett die Züge ab der eingefügten Stellung (beide Seiten)."
                     else -> "Spiele auf dem Brett die Züge vom Start bis zur Stellung (beide Seiten)."
@@ -130,8 +133,12 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             }
             Spacer(Modifier.height(8.dp))
             MoveList(vm, e)
+            SideLine(vm, e)
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (e.browsing) {
+                // Going through changes no move; to change them, switch over.
+                OutlinedButton(onClick = vm::editorStartEditing) { Text("Züge bearbeiten") }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (e.atEnd) {
                     OutlinedButton(onClick = vm::editorUndo, enabled = e.moves.isNotEmpty()) { Text("Zug zurück") }
                 } else {
@@ -236,13 +243,39 @@ private fun MoveList(vm: AppViewModel, e: EditorState) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        MoveChip("Start", e.cursor == 0) { vm.editorGoTo(0) }
+        MoveChip("Start", e.cursor == 0 && !e.inSide) { vm.editorGoTo(0) }
         e.moves.forEachIndexed { i, move ->
             val before = positions[i]
             // "1. e4" for White, the bare move for Black, as in a game score.
             val label = if (before.whiteToMove) numberedSan(before, move) else before.san(move)
-            MoveChip(label, e.cursor == i + 1) { vm.editorGoTo(i + 1) }
+            // In a side line no move of the variant is marked: the board is off it.
+            MoveChip(label, e.cursor == i + 1 && !e.inSide) { vm.editorGoTo(i + 1) }
         }
+    }
+}
+
+/** The side line tried while going through, under the variant, and the way back to it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SideLine(vm: AppViewModel, e: EditorState) {
+    if (!e.inSide) return
+    Spacer(Modifier.height(8.dp))
+    Text("Nebenstrang (nur zum Anschauen, wird nicht gespeichert)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+    Spacer(Modifier.height(4.dp))
+    var before = e.shown.fold(e.start) { p, m -> p.play(m) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        e.side.forEachIndexed { i, move ->
+            // Its first move with its number, also for Black ("5... Nc6"), then as in a game score.
+            val label = if (before.whiteToMove || i == 0) numberedSan(before, move) else before.san(move)
+            before = before.play(move)
+            MoveChip(label, e.sideCursor == i + 1) {
+                e.playing = false
+                e.sideCursor = i + 1
+            }
+        }
+    }
+    TextButton(onClick = vm::backToLine) {
+        Text("↩ Zurück zur Variante" + if (LocalTouch.current) "" else " (Strg+B Enter)")
     }
 }
 
@@ -363,5 +396,6 @@ private fun DrawingsEditor(vm: AppViewModel, e: EditorState) {
             }
         }
     }
-    TextButton(onClick = vm::editorNewDrawing) { Text("+ Zeichnung hier (${e.plyLabel(e.cursor)})") }
+    // Drawings belong to the variant, not to a side line.
+    if (!e.inSide) TextButton(onClick = vm::editorNewDrawing) { Text("+ Zeichnung hier (${e.plyLabel(e.cursor)})") }
 }

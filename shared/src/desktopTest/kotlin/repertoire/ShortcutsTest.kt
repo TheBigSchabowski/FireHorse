@@ -516,6 +516,100 @@ class ShortcutsTest {
     }
 
     @Test
+    fun notesOpenAtTheOpeningOnScreenAndAreKept() {
+        val vm = app()
+        vm.ctrlB()
+        vm.key(Key.E, 'e')
+        assertEquals(repertoire.core.Library.GENERAL_NOTES, vm.notesOf)
+        vm.saveNotes(vm.notesOf!!, "Immer zuerst entwickeln.")
+        vm.notesOf = null
+
+        vm.addVariant("Four Knights", "e4", "e5", "Nf3", "Nc6", "Nc3", "Nf6")
+        vm.editVariant(vm.library.variants.single())
+        vm.run(Command.NOTES)
+        assertEquals("Four Knights", vm.notesOf)
+        assertEquals(listOf(repertoire.core.Library.GENERAL_NOTES, "Four Knights"), vm.notesOpenings)
+        vm.saveNotes("Four Knights", "Spanisch-Vierspringer: Lb5")
+        // Ctrl+B e again closes them.
+        vm.run(Command.NOTES)
+        assertNull(vm.notesOf)
+        assertEquals(
+            mapOf(repertoire.core.Library.GENERAL_NOTES to "Immer zuerst entwickeln.", "Four Knights" to "Spanisch-Vierspringer: Lb5"),
+            vm.library.notes,
+        )
+        // An empty note is gone again.
+        vm.saveNotes("Four Knights", "  ")
+        assertEquals(setOf(repertoire.core.Library.GENERAL_NOTES), vm.library.notes.keys)
+    }
+
+    @Test
+    fun theDatabaseWindowOpensAndWithoutATokenSaysWhy() {
+        val vm = app()
+        vm.ctrlB()
+        vm.key(Key.L, 'l')
+        assertTrue(vm.explorerOpen)
+        val failure = runCatching { kotlinx.coroutines.runBlocking { vm.explore(repertoire.core.ExplorerSource.MASTERS, Position.START.fen) } }
+        assertTrue(failure.exceptionOrNull()!!.message!!.contains("API-Schlüssel"))
+        vm.setLichessToken("  lip_abc  ")
+        assertEquals("lip_abc", vm.library.settings.lichessToken)
+        // The token stays out of exports.
+        assertFalse(repertoire.core.Exchange.export(vm.library.variants, vm.progress).contains("lip_abc"))
+    }
+
+    @Test
+    fun goingThroughKeepsTheLineAndCtrlBEnterLeavesTheSideLine() {
+        val vm = app()
+        vm.addVariant("Sizilianisch", "e4", "c5", "Nf3", "d6")
+        val saved = vm.library.variants.single()
+        vm.editVariant(saved, fromStart = true)
+        val e = vm.editor!!
+        assertTrue(e.browsing)
+        fun play(san: String) = vm.editorPlay(e.position.parseSan(san)!!)
+
+        // The move of the line walks on.
+        play("e4")
+        assertEquals(1, e.cursor)
+        assertFalse(e.inSide)
+        // Another one opens a side line; the variant stays.
+        play("e5")
+        play("Nf3")
+        assertEquals(listOf("e7e5", "g1f3"), e.side.map { it.uci })
+        assertEquals(saved.moves, e.moves.map { it.uci })
+        assertEquals(1, e.cursor)
+        // Stepping back and forth stays in it.
+        vm.editorStepBack()
+        assertEquals(1, e.sideCursor)
+        vm.editorStepForward()
+        assertEquals(2, e.sideCursor)
+
+        // Ctrl+B Enter: back on the variant where it was left.
+        vm.ctrlB()
+        vm.key(Key.Enter, '\r')
+        assertFalse(e.inSide)
+        assertEquals(1, e.cursor)
+        assertEquals(Position.START.play(Position.START.parseSan("e4")!!).fen, e.position.fen)
+        vm.saveEditor()
+        assertEquals(saved.moves, vm.library.variants.single().moves)
+
+        // Bearbeiten changes the line as before.
+        vm.editVariant(vm.library.variants.single())
+        val edit = vm.editor!!
+        assertFalse(edit.browsing)
+        vm.editorGoTo(1)
+        vm.editorPlay(edit.position.parseSan("e5")!!)
+        assertEquals(listOf("e2e4", "e7e5"), edit.moves.map { it.uci })
+        vm.cancelEditor()
+
+        // From going through over to changing: a click on „Züge bearbeiten“.
+        vm.editVariant(vm.library.variants.single(), fromStart = true)
+        vm.editorPlay(vm.editor!!.position.parseSan("d4")!!)
+        assertTrue(vm.editor!!.inSide)
+        vm.editorStartEditing()
+        assertFalse(vm.editor!!.browsing)
+        assertFalse(vm.editor!!.inSide)
+    }
+
+    @Test
     fun copiedPgnReadsBackFromASetUpPosition() {
         val fen = "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
         val line = repertoire.core.Pgn.parse(repertoire.core.Pgn.export(fen, listOf("2. Nf3", "2... d6")))

@@ -36,7 +36,16 @@ data class Settings(
     val boardTheme: String = "classic",
     /** The color of each of the six pens to draw with, as [PenColor.saved]: "GREEN" or "#7FFFD4 Aquamarin". */
     val pens: List<String> = Ink.DEFAULT.map { it.saved },
+    /** A personal lichess API token, for the opening database; lichess answers nothing without one. Never exported. */
+    val lichessToken: String = "",
+    /** Chess engines set up by hand (UCI programs on this computer); nothing is downloaded. */
+    val engines: List<EngineEntry> = emptyList(),
+    /** The [EngineEntry.path] of the engine that analyses; the first one if empty or gone. */
+    val engine: String = "",
 ) {
+    /** The engine that analyses, if any is set up. */
+    val chosenEngine: EngineEntry? get() = engines.firstOrNull { it.path == engine } ?: engines.firstOrNull()
+
     val penColors: List<PenColor> get() = Ink.pens(pens)
 }
 
@@ -48,6 +57,8 @@ data class Library(
     val pinned: List<String> = emptyList(),
     /** Playlists put together by hand, from any openings. */
     val playlists: List<SavedPlaylist> = emptyList(),
+    /** Notes of one's own on an opening, by its name as [openingOf] gives it; [GENERAL_NOTES] for the general ones. */
+    val notes: Map<String, String> = emptyMap(),
 ) {
     /** The variants of [playlist] in its order; ones deleted in the meantime are left out. */
     fun variantsOf(playlist: SavedPlaylist): List<Variant> =
@@ -65,6 +76,9 @@ data class Library(
     companion object {
         const val MAX_PINNED = 3
         const val NO_OPENING = "Ohne Eröffnung"
+
+        /** The notes that belong to no opening in particular. */
+        const val GENERAL_NOTES = "Allgemein"
 
         fun openingOf(v: Variant): String = v.opening.ifBlank { NO_OPENING }
     }
