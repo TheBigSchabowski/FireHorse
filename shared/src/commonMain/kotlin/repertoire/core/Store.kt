@@ -46,6 +46,8 @@ data class Settings(
     val opponentDepth: Int = 18,
     /** Which of its moves the engine as opponent plays: 1 the best, 2 the second best, 3 the third best; as last chosen. */
     val opponentRank: Int = 1,
+    /** The search field on the home screen is there (Ctrl+B s shows and hides it). */
+    val showSearch: Boolean = true,
 ) {
     /** The engine that analyses, if any is set up. */
     val chosenEngine: EngineEntry? get() = engines.firstOrNull { it.path == engine } ?: engines.firstOrNull()
@@ -64,18 +66,26 @@ data class Library(
     /** Notes of one's own on an opening, by its name as [openingOf] gives it; [GENERAL_NOTES] for the general ones. */
     val notes: Map<String, String> = emptyMap(),
 ) {
-    /** The variants of [playlist] in its order; ones deleted in the meantime are left out. */
+    /** The variants that are not archived: the repertoire that is trained. */
+    val active: List<Variant> get() = variants.filterNot { it.archived }
+
+    /** The variants of [playlist] in its order; ones deleted or archived in the meantime are left out. */
     fun variantsOf(playlist: SavedPlaylist): List<Variant> =
-        playlist.variantIds.mapNotNull { id -> variants.firstOrNull { it.id == id } }
+        playlist.variantIds.mapNotNull { id -> active.firstOrNull { it.id == id } }
 
     /** The variants by opening: the pinned openings first, then the others alphabetically; each in the order it was created. */
     fun groups(): List<OpeningGroup> {
-        val byOpening = variants.groupBy(::openingOf)
+        val byOpening = active.groupBy(::openingOf)
         val pins = pinned.filter { it in byOpening }
         val rest = (byOpening.keys - pins.toSet()).sortedWith(String.CASE_INSENSITIVE_ORDER)
         return pins.map { OpeningGroup(it, byOpening.getValue(it), pinned = true) } +
             rest.map { OpeningGroup(it, byOpening.getValue(it), pinned = false) }
     }
+
+    /** The archived variants by opening, alphabetically; each in the order it was created. */
+    fun archivedGroups(): List<OpeningGroup> =
+        variants.filter { it.archived }.groupBy(::openingOf).entries.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.key })
+            .map { (opening, vs) -> OpeningGroup(opening, vs, pinned = false) }
 
     companion object {
         const val MAX_PINNED = 3

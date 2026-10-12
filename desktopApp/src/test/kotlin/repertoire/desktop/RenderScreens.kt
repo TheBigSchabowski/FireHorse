@@ -72,6 +72,21 @@ fun main() {
     }
 
     render("home") { it.sample() }
+    render("home-search") { vm ->
+        vm.sample()
+        vm.addVariant("Caro-Kann", "Vorstoß", "e4 c6 d4 d5 e5 Bf5")
+        vm.addVariant("Königsindisch", "Klassisch", "d4 Nf6 c4 g6 Nc3 Bg7 e4 d6 Nf3 O-O")
+        vm.archiveOpening("Caro-Kann")
+        vm.flash = null
+        vm.search = "e4 schwarz"
+    }
+    render("home-archive") { vm ->
+        vm.sample()
+        vm.addVariant("Caro-Kann", "Vorstoß", "e4 c6 d4 d5 e5 Bf5")
+        vm.archiveOpening("Sizilianisch")
+        vm.flash = null
+        vm.archiveOpen = true
+    }
     render("training") { vm ->
         vm.sample()
         vm.practice(vm.library.variants.last().id)

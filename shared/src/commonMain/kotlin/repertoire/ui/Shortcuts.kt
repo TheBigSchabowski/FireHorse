@@ -133,6 +133,7 @@ enum class Command(val key: Char, val label: String, val holdSteps: Int?) {
     EXPLORER('l', "lichess-Eröffnungsdatenbank zur Stellung auf dem Brett", null),
     ENGINE('r', "Engine rechnet die Stellung auf dem Brett (am Computer)", null),
     NOTES('e', "Eröffnungsnotizen", null),
+    SEARCH('s', "Suchfeld auf der Startseite ein- und ausblenden", null),
     SETTINGS('b', "Einstellungen und Tastenkürzel", null),
     ;
 
@@ -444,6 +445,7 @@ internal val Command.short: String get() = when (this) {
     Command.EXPLORER -> "Datenbank"
     Command.ENGINE -> "Engine"
     Command.NOTES -> "Notizen"
+    Command.SEARCH -> "Suchen"
     Command.SETTINGS -> "Einstellungen"
 }
 

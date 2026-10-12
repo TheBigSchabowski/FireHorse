@@ -23,6 +23,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import repertoire.core.Library
 import repertoire.core.OpeningGroup
 import repertoire.core.QuizBuilder
+import repertoire.core.VariantSearch
 import repertoire.core.SavedPlaylist
 import repertoire.core.Variant
 import repertoire.core.compactMoves
@@ -79,18 +81,26 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.height(6.dp))
             Text("${stats.due} fällig · ${stats.new} neu · ${stats.total} Varianten", style = MaterialTheme.typography.bodyMedium)
+            val searching = VariantSearch(vm.search).active
+            if (vm.library.variants.isNotEmpty() && vm.library.settings.showSearch) SearchField(vm, searching)
 
             Spacer(Modifier.height(20.dp))
-            if (vm.library.variants.isEmpty()) {
+            if (vm.library.active.isEmpty()) {
                 Text(
-                    "Noch keine Varianten. Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen – " +
+                    (if (vm.library.variants.isNotEmpty()) "Alles liegt im Archiv unten. " else "Noch keine Varianten. ") +
+                        "Klick auf „+ Neue Variante“, spiel die Züge bis zur Stellung und gib ihr einen Namen – " +
                         "oder füg mit „PGN/FEN einfügen“ eine Zugfolge ein, die du irgendwo gefunden hast.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(20.dp))
             }
             // Picking variants is about the openings; the playlists wait above until it is done.
-            if (vm.library.variants.isNotEmpty() && vm.selected == null) PlaylistSection(vm)
-            val groups = vm.library.groups()
+            if (vm.library.active.isNotEmpty() && vm.selected == null && !searching) PlaylistSection(vm)
+            val groups = vm.shownGroups
+            if (searching && groups.isEmpty() && vm.shownArchive.isEmpty()) {
+                Text("Nichts gefunden.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(20.dp))
+            }
             val anyPinned = groups.any { it.pinned }
             groups.forEachIndexed { i, group ->
                 // With pins, the list falls into two parts: what matters now, and the rest.
@@ -106,7 +116,7 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     )
                     Spacer(Modifier.height(4.dp))
                 }
-                OpeningHeader(vm, group)
+                OpeningHeader(vm, group, searching)
                 Spacer(Modifier.height(8.dp))
                 for (v in group.variants) {
                     VariantRow(vm, v)
@@ -114,6 +124,7 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.height(12.dp))
             }
+            if (vm.selected == null) ArchiveSection(vm, searching)
 
             vm.message?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium)
@@ -169,6 +180,7 @@ private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
                 TextButton(onClick = vm::saveSelectionAsPlaylist, enabled = n > 0) { Text("Als Playlist speichern") }
                 TextButton(onClick = vm::playSelected, enabled = n > 0) { Text("▶ Abspielen") }
                 TextButton(onClick = vm::learnSelected, enabled = n > 0) { Text("Lernen") }
+                TextButton(onClick = vm::archiveSelected, enabled = n > 0) { Text("Archivieren") }
                 if (confirmDelete) {
                     TextButton(onClick = { vm.deleteSelected(); confirmDelete = false }) {
                         Text("Wirklich $n löschen", color = DELETE_COLOR)
@@ -285,27 +297,31 @@ internal fun PlaylistNameDialog(vm: AppViewModel, n: PlaylistNaming) {
 /** Name of the opening and what goes for all its variants: the playlist, pinning, export. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OpeningHeader(vm: AppViewModel, group: OpeningGroup) {
+private fun OpeningHeader(vm: AppViewModel, group: OpeningGroup, searching: Boolean) {
     var confirmDelete by remember(group.opening) { mutableStateOf(false) }
     val count = group.variants.size
+    val all = vm.library.groups().firstOrNull { it.opening == group.opening }?.variants?.size ?: count
     Text(group.opening, style = MaterialTheme.typography.titleLarge)
     Text(
-        "$count " + (if (count == 1) "Variante" else "Varianten"),
+        (if (all != count) "$count von $all " else "$count ") + (if (all == 1) "Variante" else "Varianten"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     val selected = vm.selected
     if (selected != null) {
-        val all = group.variants.all { it.id in selected }
-        TextButton(onClick = { vm.toggleSelectedOpening(group.opening) }) { Text(if (all) "Keine auswählen" else "Alle auswählen") }
+        val ticked = group.variants.all { it.id in selected }
+        TextButton(onClick = { vm.toggleSelectedOpening(group.opening) }) { Text(if (ticked) "Keine auswählen" else "Alle auswählen") }
         return
     }
+    // What goes for the whole opening would also hit the variants the search hides.
+    if (searching) return
     FlowRow {
         TextButton(onClick = { vm.playPlaylist(group.opening) }) { Text("▶ Playlist") }
         TextButton(onClick = { vm.learnPlaylist(group.opening) }) { Text("Playlist lernen") }
         TextButton(onClick = { vm.togglePin(group.opening) }) { Text(if (group.pinned) "Lösen" else "Anpinnen") }
         TextButton(onClick = { vm.startSelecting() }) { Text("Auswählen") }
         if (vm.canTransfer) TextButton(onClick = { vm.export(group.opening) }) { Text("Exportieren") }
+        TextButton(onClick = { vm.archiveOpening(group.opening) }) { Text("Archivieren") }
         if (confirmDelete) {
             TextButton(onClick = { vm.deleteOpening(group.opening) }) {
                 Text(if (count == 1) "Wirklich löschen" else "Wirklich alle $count löschen", color = DELETE_COLOR)
@@ -370,6 +386,151 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
                 TextButton(onClick = { vm.editVariant(v, fromStart = true) }) { Text("Durchgehen") }
                 TextButton(onClick = { vm.newVariant(template = v) }) { Text("Weiterführen") }
                 TextButton(onClick = { vm.editVariant(v) }) { Text("Bearbeiten") }
+                TextButton(onClick = { vm.archiveVariant(v.id) }) { Text("Archivieren") }
+                if (confirmDelete) {
+                    TextButton(onClick = { vm.deleteVariant(v.id) }) { Text("Wirklich löschen", color = DELETE_COLOR) }
+                    TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
+                } else {
+                    TextButton(onClick = { confirmDelete = true }) { Text("Löschen") }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The search under the counts: moves ("d4", "e4 c5", "6.f3"), the side ("schwarz") and names, see
+ * [VariantSearch]. While it finds something, what it found can be played, learned or selected.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SearchField(vm: AppViewModel, searching: Boolean) {
+    val focus = remember { FocusRequester() }
+    // Shown with Ctrl+B s: ready to type into.
+    LaunchedEffect(vm.searchFocus) { if (vm.searchFocus > 0) focus.requestFocus() }
+    Spacer(Modifier.height(12.dp))
+    OutlinedTextField(
+        vm.search,
+        { vm.search = it },
+        placeholder = { Text("Suchen: d4, e4 c5, 6.f3, schwarz, Najdorf …") },
+        singleLine = true,
+        trailingIcon = if (vm.search.isNotEmpty()) {
+            { TextButton(onClick = { vm.search = "" }) { Text("✕") } }
+        } else {
+            null
+        },
+        modifier = Modifier.typing(vm).fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && vm.search.isNotEmpty()) true.also { vm.search = "" } else false
+        },
+    )
+    if (searching && vm.selected == null) {
+        val hits = vm.searchHits.size
+        val archived = vm.shownArchive.sumOf { it.variants.size }
+        FlowRow(verticalArrangement = Arrangement.Center) {
+            Text(
+                "$hits Treffer" + if (archived > 0) " · $archived im Archiv" else "",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(end = 8.dp, top = 12.dp),
+            )
+            TextButton(onClick = vm::playHits, enabled = hits > 0) { Text("▶ Abspielen") }
+            TextButton(onClick = vm::learnHits, enabled = hits > 0) { Text("Lernen") }
+            TextButton(onClick = vm::selectHits, enabled = hits > 0) { Text("Auswählen") }
+        }
+    }
+}
+
+/**
+ * The archive at the bottom of the home screen, closed at first: openings and variants put away,
+ * e.g. to build a new repertoire without the old one in the way. From here they can be gone
+ * through, taken as the start of a new variant, brought back or deleted.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArchiveSection(vm: AppViewModel, searching: Boolean) {
+    val groups = vm.shownArchive
+    if (groups.isEmpty()) return
+    val count = groups.sumOf { it.variants.size }
+    // What the search finds in the archive is shown straight away.
+    val open = vm.archiveOpen || searching
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "ARCHIV  ·  $count " + (if (count == 1) "Variante" else "Varianten"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        if (!searching) TextButton(onClick = { vm.archiveOpen = !vm.archiveOpen }) { Text(if (open) "Schließen" else "Öffnen") }
+    }
+    if (!open) {
+        Text(
+            "Wird nicht abgefragt und stört beim Üben nicht; der Lernstand bleibt, bis du es zurückholst.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(20.dp))
+        return
+    }
+    Spacer(Modifier.height(4.dp))
+    for (group in groups) {
+        ArchivedOpening(vm, group, searching)
+        Spacer(Modifier.height(8.dp))
+        for (v in group.variants) {
+            ArchivedVariantRow(vm, v)
+            Spacer(Modifier.height(8.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArchivedOpening(vm: AppViewModel, group: OpeningGroup, searching: Boolean) {
+    var confirmDelete by remember(group.opening) { mutableStateOf(false) }
+    val count = group.variants.size
+    val all = vm.library.archivedGroups().firstOrNull { it.opening == group.opening }?.variants?.size ?: count
+    Text(group.opening, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        (if (all != count) "$count von $all " else "$count ") + (if (all == 1) "Variante" else "Varianten") + " im Archiv",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (searching) return
+    FlowRow {
+        TextButton(onClick = { vm.restoreOpening(group.opening) }) { Text(if (count == 1) "Zurückholen" else "Alle zurückholen") }
+        if (vm.canTransfer) TextButton(onClick = { vm.export(group.opening, archived = true) }) { Text("Exportieren") }
+        if (confirmDelete) {
+            TextButton(onClick = { vm.deleteOpening(group.opening, archived = true) }) {
+                Text(if (count == 1) "Wirklich löschen" else "Wirklich alle $count löschen", color = DELETE_COLOR)
+            }
+            TextButton(onClick = { confirmDelete = false }) { Text("Nein") }
+        } else {
+            TextButton(onClick = { confirmDelete = true }) { Text("Löschen") }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArchivedVariantRow(vm: AppViewModel, v: Variant) {
+    var confirmDelete by remember(v.id) { mutableStateOf(false) }
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(v.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "im Archiv  ·  ${if (v.playWhite) "Weiß" else "Schwarz"}" + if (v.setUp) "  ·  ab eigener Stellung" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                compactMoves(v.numberedSan()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow {
+                TextButton(onClick = { vm.restoreVariant(v.id) }) { Text("Zurückholen") }
+                TextButton(onClick = { vm.editVariant(v, fromStart = true) }) { Text("Durchgehen") }
+                // A new variant of the repertoire from the old moves; the archived one stays as it is.
+                TextButton(onClick = { vm.newVariant(template = v) }) { Text("Als Vorlage") }
                 if (confirmDelete) {
                     TextButton(onClick = { vm.deleteVariant(v.id) }) { Text("Wirklich löschen", color = DELETE_COLOR) }
                     TextButton(onClick = { confirmDelete = false }) { Text("Nein") }

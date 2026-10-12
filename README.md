@@ -61,8 +61,21 @@ installieren“ erlauben.
 - **Anpinnen:** holt eine Eröffnung ganz nach oben auf der Startseite, bis zu drei gleichzeitig.
   „Lösen“ stellt sie wieder an ihren Platz.
 - **Auswählen:** zeigt an jeder Variante ein Kästchen; „Alle auswählen“ nimmt eine ganze Eröffnung
-  dazu. Die Auswahl lässt sich als Playlist speichern, abspielen, lernen oder auf einmal löschen.
+  dazu. Die Auswahl lässt sich als Playlist speichern, abspielen, lernen, archivieren oder auf einmal löschen.
   **Löschen** bei einer Eröffnung löscht sie samt allen Varianten (mit Rückfrage).
+- **Suchen:** das Feld unter den Zahlen auf der Startseite zeigt nur, worauf alle Begriffe passen (auch
+  im Archiv). Züge gelten ab dem Anfang: `d4` findet die 1.d4-Eröffnungen, `e4 c5` findet 1.e4 c5,
+  ein Schwarzzug allein die erste Antwort (`c5` = 1…c5); mit Nummer genau dort (`6.f3`, `3...e6`).
+  `weiß`/`schwarz` filtert nach der gespielten Seite, alles andere sucht im Namen von Eröffnung und
+  Variante (`najdorf`). Deutsche Figuren gehen (`Sf3`), `x`/`+`/`=` darf man weglassen. Die Treffer
+  lassen sich abspielen, lernen oder auswählen; ✕ oder `Esc` leert das Feld. `Strg+B s` blendet das
+  Feld aus (die Suche ist dann weg) und wieder ein, mit dem Cursor darin.
+- **Archivieren:** bei einer Eröffnung, einer Variante oder einer Auswahl – zum Beiseitelegen statt
+  Löschen, z. B. für ein neues Repertoire. Archiviertes steht ganz unten auf der Startseite unter
+  „Archiv“, wird nicht abgefragt, zählt nicht bei fällig/neu, fehlt in Playlists, und seine Züge
+  gelten beim Üben nicht als „andere Variante“. Von dort: **Durchgehen**, **Als Vorlage** (neue
+  Variante mit diesen Zügen), **Zurückholen** (mit altem Lernstand) oder endgültig **Löschen**.
+  „Alle exportieren“ nimmt das Archiv mit.
 - **Durchgehen:** öffnet die Variante am Start. Mit |◀ ◀ ▶ ▶|, den Pfeiltasten ← → oder einem Klick
   auf einen Zug in der Liste gehst du die Züge durch — nichts wird dabei gelöscht.
 - **Bearbeiten:** dasselbe Brett, nur gleich bei der Endstellung. Ein Zug mitten in der Variante
@@ -141,6 +154,7 @@ oder ganz ausschalten.
 | `Strg+B d` | Kürzel-Liste antippen | PGN mit allem einfügen: Züge, Namen, Theorie und Zeichnungen kommen zurück (auch aus lichess) |
 | `Strg+B l` | Kürzel-Liste antippen | lichess-Eröffnungsdatenbank zur Stellung auf dem Brett (Meister oder lichess); ein Klick auf einen Zug spielt ihn im Editor |
 | `Strg+B e` | Kürzel-Liste antippen | Eröffnungsnotizen: eigene Notizen zur offenen Eröffnung, oder „Allgemein“ |
+| `Strg+B s` | Kürzel-Liste antippen | Suchfeld auf der Startseite aus- und wieder einblenden (eingeblendet mit dem Cursor darin) |
 | `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung; Klick spielt den ersten Zug einer Linie, Shift+Klick die ganze Linie (nur am Computer) |
 | `Strg+B Shift+R` | – | Engine als Gegner im Editor: Seite (Weiß/Schwarz), Tiefe pro Zug und bester/zweit-/drittbester Zug wählen, dann zieht sie für diese Seite, du spielst die andere (nur am Computer) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |

@@ -35,7 +35,9 @@ import repertoire.core.Position
 import repertoire.core.Progress
 import repertoire.core.Quiz
 import repertoire.core.QuizAttempt
+import repertoire.core.OpeningGroup
 import repertoire.core.QuizBuilder
+import repertoire.core.VariantSearch
 import repertoire.core.ReviewState
 import repertoire.core.SavedPlaylist
 import repertoire.core.Scheduler
@@ -468,6 +470,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             Command.EXPLORER -> explorerOpen = !explorerOpen
             Command.ENGINE -> engineOpen = !engineOpen
             Command.NOTES -> if (notesOf != null) notesOf = null else openNotes()
+            Command.SEARCH -> toggleSearch()
             Command.PLAY -> editor?.let { editorTogglePlay() }
                 ?: run { flash = "Abspielen geht in einer geöffneten Variante (Durchgehen)." }
             Command.COPY_FEN, Command.COPY_PGN -> copyBoard(command)
@@ -858,7 +861,8 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     val canTransfer: Boolean get() = files != null
 
-    private val quizzes: List<Quiz> get() = QuizBuilder.build(library.variants)
+    /** The puzzles of the repertoire; archived variants are not among them, nor do their positions count in the others. */
+    private val quizzes: List<Quiz> get() = QuizBuilder.build(library.active)
 
     fun stats(): Stats = Scheduler.stats(quizzes, progress)
 
@@ -882,7 +886,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     /** New variant; with [template] its moves are taken over so you only add what is different. */
     fun newVariant(template: Variant? = null) {
-        val last = library.variants.lastOrNull()
+        val last = library.active.lastOrNull()
         editor = EditorState(
             editingId = null,
             opening = template?.opening ?: last?.opening ?: "",
@@ -1177,7 +1181,7 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val e = editor ?: return null
         if (e.moves.isEmpty()) return null
         val key = e.target.key
-        return library.variants.firstOrNull { it.id != e.editingId && it.moves.isNotEmpty() && it.target.key == key }
+        return library.active.firstOrNull { it.id != e.editingId && it.moves.isNotEmpty() && it.target.key == key }
             ?.let(QuizBuilder::title)
     }
 
@@ -1194,11 +1198,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         val e = editor ?: return
         if (e.name.isBlank() || e.moves.isEmpty()) return
         val id = e.editingId ?: newId()
-        val variant = Variant(
+        var variant = Variant(
             id, e.opening.trim(), e.name.trim(), e.moves.map { it.uci }, e.playWhite, e.theory.text.trim(), e.startFen,
             e.keptDrawings.map { it.copy(question = it.question.trim()) },
         )
         val old = library.variants.firstOrNull { it.id == id }
+        // Edited in the archive, it stays there.
+        if (old?.archived == true) variant = variant.copy(archived = true)
         updateLibrary { lib ->
             lib.copy(variants = if (old != null) lib.variants.map { if (it.id == id) variant else it } else lib.variants + variant)
         }
@@ -1394,12 +1400,99 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         if (choosingFor == id) endSelecting()
     }
 
-    /** All variants of [opening] with their learning state, and its pin. */
-    fun deleteOpening(opening: String) {
-        deleteVariants(variantsOf(opening).map { it.id }.toSet())
+    /** All variants of [opening] with their learning state, and its pin; with [archived], those of it in the archive. */
+    fun deleteOpening(opening: String, archived: Boolean = false) {
+        val group = if (archived) library.archivedGroups() else library.groups()
+        deleteVariants(group.firstOrNull { it.opening == opening }?.variants.orEmpty().map { it.id }.toSet())
     }
 
     fun deleteVariant(id: String) = deleteVariants(setOf(id))
+
+    // ---- Searching the home screen --------------------------------------------------------
+
+    /** What is typed into the search on the home screen, see [VariantSearch]; empty: everything is shown. */
+    var search by mutableStateOf("")
+
+    /** Goes up each time the search field is to take the focus. */
+    var searchFocus by mutableIntStateOf(0)
+        private set
+
+    /**
+     * Ctrl+B s: the search field on the home screen out of sight, its search with it, or back with
+     * the cursor in it. The choice is kept.
+     */
+    fun toggleSearch() {
+        if (editor != null || session != null) {
+            flash = "Die Suche ist auf der Startseite."
+            return
+        }
+        val show = !library.settings.showSearch
+        updateLibrary { it.copy(settings = it.settings.copy(showSearch = show)) }
+        if (show) searchFocus++ else search = ""
+    }
+
+    private fun shown(groups: List<OpeningGroup>): List<OpeningGroup> {
+        val s = VariantSearch(search)
+        if (!s.active) return groups
+        return groups.mapNotNull { g -> g.variants.filter(s::matches).takeIf { it.isNotEmpty() }?.let { g.copy(variants = it) } }
+    }
+
+    /** The openings with the variants the search finds; all of them without a search. */
+    val shownGroups: List<OpeningGroup> get() = shown(library.groups())
+
+    /** The same in the archive. */
+    val shownArchive: List<OpeningGroup> get() = shown(library.archivedGroups())
+
+    /** The variants the search finds outside the archive, in the order of the home screen. */
+    val searchHits: List<Variant> get() = shownGroups.flatMap { it.variants }
+
+    fun playHits() = playVariants("Suche „${search.trim()}“", searchHits)
+
+    fun learnHits() = learnVariants(searchHits)
+
+    /** Selecting, with what the search found ticked. */
+    fun selectHits() {
+        selected = searchHits.map { it.id }.toSet()
+    }
+
+    // ---- The archive ---------------------------------------------------------------------
+
+    /** The archive at the bottom of the home screen is open. */
+    var archiveOpen by mutableStateOf(false)
+
+    /** All variants of [opening] into the archive; the opening is no longer pinned. */
+    fun archiveOpening(opening: String) = archive(variantsOf(opening).map { it.id }.toSet())
+
+    fun archiveVariant(id: String) = archive(setOf(id))
+
+    fun archiveSelected() {
+        archive(selected ?: return)
+        endSelecting()
+    }
+
+    /** Back from the archive into the repertoire, with the learning state they had. */
+    fun restoreOpening(opening: String) =
+        setArchived(library.archivedGroups().firstOrNull { it.opening == opening }?.variants.orEmpty().map { it.id }.toSet(), false)
+
+    fun restoreVariant(id: String) = setArchived(setOf(id), false)
+
+    private fun archive(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        setArchived(ids, true)
+        val n = ids.size
+        flash = (if (n == 1) "Ins Archiv gelegt" else "$n Varianten ins Archiv gelegt") + " – unten auf der Startseite, von dort zurückzuholen."
+    }
+
+    private fun setArchived(ids: Set<String>, archived: Boolean) {
+        if (ids.isEmpty()) return
+        updateLibrary { lib ->
+            val variants = lib.variants.map { if (it.id in ids) it.copy(archived = archived) else it }
+            // An opening with nothing left outside the archive is not pinned any more.
+            val live = variants.filterNot { it.archived }.map(Library::openingOf).toSet()
+            lib.copy(variants = variants, pinned = lib.pinned.filter { it in live })
+        }
+        selected = selected?.minus(ids)
+    }
 
     private fun deleteVariants(ids: Set<String>) {
         updateLibrary { lib ->
@@ -1440,10 +1533,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         selected = if (id in s) s - id else s + id
     }
 
-    /** Ticks every variant of [opening], or unticks them all if they already are. */
+    /** Ticks every variant of [opening] that the search shows, or unticks them all if they already are. */
     fun toggleSelectedOpening(opening: String) {
         val s = selected ?: return
-        val ids = variantsOf(opening).map { it.id }.toSet()
+        val ids = shownGroups.firstOrNull { it.opening == opening }?.variants.orEmpty().map { it.id }.toSet()
         selected = if (s.containsAll(ids)) s - ids else s + ids
     }
 
@@ -1775,10 +1868,13 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     // ---- Export / import -----------------------------------------------------------------
 
-    /** Saves [opening]'s variants (all if null), with their learning state, as a JSON file. */
-    fun export(opening: String? = null) {
+    /**
+     * Saves [opening]'s variants (all if null, the archive included), with their learning state, as
+     * a JSON file; with [archived], those of [opening] in the archive.
+     */
+    fun export(opening: String? = null, archived: Boolean = false) {
         val picker = files ?: return
-        val variants = library.variants.filter { opening == null || Library.openingOf(it) == opening }
+        val variants = library.variants.filter { opening == null || Library.openingOf(it) == opening && it.archived == archived }
         val name = "eroeffnungen-" + (opening?.let(::fileSafe) ?: "alle") + ".json"
         picker.save(name, Exchange.export(variants, progress)) { file ->
             if (file != null) message = "${variants.size} Variante(n) exportiert: $file"

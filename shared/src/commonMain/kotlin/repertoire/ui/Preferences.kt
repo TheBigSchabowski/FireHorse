@@ -90,7 +90,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     THEORY("Theorie und Lücken", "Notizen zur Variante, die beim Üben abgefragt werden"),
     BOARD("Auf dem Brett zeichnen", "Pfeile und Kreise, Zeichenmodus, Zeichnungen zum Abfragen"),
     PLAYER("Abspielen", "Eine Variante von allein durchlaufen lassen, Tempo, Wiederholen"),
-    PLAYLIST("Playlists, Anpinnen, Auswählen", "Varianten nacheinander abspielen oder lernen, eigene Playlists, mehrere auf einmal löschen"),
+    PLAYLIST("Playlists, Anpinnen, Suchen, Archiv", "Varianten nacheinander abspielen oder lernen, eigene Playlists, nach Zügen und Farbe suchen, mehrere auf einmal archivieren oder löschen"),
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
     TAP_ZONES("Doppeltippen", "Bereiche des Bildschirms für Kürzel, Raster frei wählbar", touch = true),
     KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
@@ -771,8 +771,20 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             SubHeading("Anpinnen")
             Bullet("Anpinnen", "holt eine Eröffnung ganz nach oben, über alle anderen. Bis zu ${Library.MAX_PINNED} Eröffnungen gehen; „Lösen“ stellt sie wieder an ihren Platz.")
             SubHeading("Auswählen und Löschen")
-            Bullet("Auswählen", "bei einer Eröffnung zeigt an jeder Variante ein Kästchen; " + (if (touch) "antippen" else "anklicken") + " wählt sie aus. „Alle auswählen“ nimmt eine ganze Eröffnung dazu. Oben steht dann, was mit der Auswahl geht: als Playlist speichern, abspielen, lernen oder löschen. „Fertig“ beendet das Auswählen.")
+            Bullet("Auswählen", "bei einer Eröffnung zeigt an jeder Variante ein Kästchen; " + (if (touch) "antippen" else "anklicken") + " wählt sie aus. „Alle auswählen“ nimmt eine ganze Eröffnung dazu. Oben steht dann, was mit der Auswahl geht: als Playlist speichern, abspielen, lernen, archivieren oder löschen. „Fertig“ beendet das Auswählen.")
             Bullet("Löschen", "bei einer Eröffnung löscht sie mit allen Varianten. Wie beim Löschen einer Variante fragt die App erst nach, und der Lernstand ist danach weg.")
+            SubHeading("Suchen")
+            Para("Das Suchfeld unter den Zahlen auf der Startseite zeigt nur die Varianten, auf die alle Begriffe passen – auch im Archiv. Die Treffer lassen sich gleich abspielen, lernen oder auswählen.")
+            Bullet("Züge", "gelten ab dem Anfang: „d4“ findet die 1.d4-Eröffnungen (nicht jeden Sizilianer, in dem später d4 kommt), „e4 c5“ findet 1.e4 c5, ein Schwarzzug allein die erste Antwort („c5“ ist 1…c5).")
+            Bullet("Mit Zugnummer", "gilt ein Zug genau dort: „6.f3“, „3...e6“ oder „3. d4“. Deutsche Figuren gehen auch (Sf3 = Nf3), x, + und = darf man weglassen.")
+            Bullet("Farbe", "„weiß“ oder „schwarz“: die Seite, die du in der Variante spielst.")
+            Bullet("Alles andere", "wird im Namen der Eröffnung und der Variante gesucht, z. B. „najdorf“. Mehrere Begriffe: „schwarz c5 najdorf“. ✕ oder Esc leert das Feld.")
+            Bullet(if (touch) "Ein- und ausblenden" else settings.shortcutLabel(Command.SEARCH), "blendet das Suchfeld aus – die Suche ist dann weg – und wieder ein, mit dem Cursor darin." + if (touch) " Steht in der Kürzel-Liste am Pferd unter „Suchen“." else "")
+            Para("Solange gesucht wird, fehlen bei den Eröffnungen die Knöpfe für die ganze Eröffnung (Playlist, Archivieren, Löschen …), damit sie nicht die ausgeblendeten Varianten treffen.")
+            SubHeading("Archiv")
+            Para("Zum Beiseitelegen statt Löschen, z. B. wenn du ein neues Repertoire aufbaust und das alte nicht im Weg sein soll.")
+            Bullet("Archivieren", "bei einer Eröffnung, einer Variante oder einer Auswahl legt sie ins Archiv ganz unten auf der Startseite. Dort werden sie nicht abgefragt, zählen nicht bei „fällig“ und „neu“, fehlen in den Playlists, und ihre Züge gelten beim Üben nicht mehr als „andere Variante“. Eine angepinnte Eröffnung wird gelöst.")
+            Bullet("Im Archiv", "„Öffnen“ zeigt alles darin. „Durchgehen“ öffnet eine Variante zum Anschauen, „Als Vorlage“ beginnt mit ihren Zügen eine neue Variante im Repertoire, „Zurückholen“ bringt sie mit ihrem alten Lernstand zurück, „Löschen“ löscht sie endgültig.")
         }
         HelpTopic.HORSE -> {
             Para("Unten rechts sitzt ein kleines Pferd. Es ersetzt am Handy die Tastenkürzel vom Computer.")

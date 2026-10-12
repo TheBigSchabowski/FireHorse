@@ -23,6 +23,11 @@ data class Variant(
     val startFen: String = Position.START_FEN,
     /** Arrows and circles kept at positions of the line, asked after the puzzle like the theory. */
     val drawings: List<Drawing> = emptyList(),
+    /**
+     * Put away: not trained, not on the list of openings, and its positions count for nothing in
+     * the other puzzles. Its learning state is kept for when it comes back.
+     */
+    val archived: Boolean = false,
 ) {
     /** True if the line does not begin at the start of a game. */
     val setUp: Boolean get() = startFen != Position.START_FEN

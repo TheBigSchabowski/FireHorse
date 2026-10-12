@@ -55,6 +55,8 @@ data class ExportedVariant(
     val drawings: List<Drawing> = emptyList(),
     /** Learning state; left out, the variant starts as new. */
     val progress: ReviewState? = null,
+    /** In the archive: kept, but not trained. */
+    val archived: Boolean = false,
 )
 
 data class ImportResult(
@@ -96,6 +98,7 @@ object Exchange {
                         startFen = v.startFen.takeIf { v.setUp },
                         drawings = v.drawings,
                         progress = if (withProgress) progress.cards[v.id] else null,
+                        archived = v.archived,
                     )
                 },
             ),
@@ -153,7 +156,7 @@ object Exchange {
             val id = e.id?.takeIf(String::isNotBlank) ?: newId()
             // A drawing after a move the line does not have would show up nowhere.
             val drawings = e.drawings.filter { it.ply in 0..moves.size && it.marks.isNotEmpty() }
-            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory, start.fen, drawings)
+            val variant = Variant(id, e.opening.trim(), e.name.trim(), moves, e.playWhite, e.theory, start.fen, drawings, e.archived)
             val old = variants.firstOrNull { it.id == id }
             if (old != null) {
                 variants = variants.map { if (it.id == id) variant else it }
