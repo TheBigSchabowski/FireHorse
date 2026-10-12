@@ -780,7 +780,7 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
             Bullet("Farbe", "„weiß“ oder „schwarz“: die Seite, die du in der Variante spielst.")
             Bullet("Alles andere", "wird im Namen der Eröffnung und der Variante gesucht, z. B. „najdorf“. Mehrere Begriffe: „schwarz c5 najdorf“. ✕ oder Esc leert das Feld.")
             Bullet(if (touch) "Ein- und ausblenden" else settings.shortcutLabel(Command.SEARCH), "blendet das Suchfeld aus – die Suche ist dann weg – und wieder ein, mit dem Cursor darin." + if (touch) " Steht in der Kürzel-Liste am Pferd unter „Suchen“." else "")
-            Para("Solange gesucht wird, fehlen bei den Eröffnungen die Knöpfe für die ganze Eröffnung (Playlist, Archivieren, Löschen …), damit sie nicht die ausgeblendeten Varianten treffen.")
+            Para("Solange gesucht wird, fehlen bei den Eröffnungen die Knöpfe für die ganze Eröffnung (Playlist, Archivieren, Löschen …), damit sie nicht die ausgeblendeten Varianten treffen. Im Archiv bleibt „Zurückholen“: es holt genau die angezeigten Varianten der Eröffnung zurück.")
             SubHeading("Archiv")
             Para("Zum Beiseitelegen statt Löschen, z. B. wenn du ein neues Repertoire aufbaust und das alte nicht im Weg sein soll.")
             Bullet("Archivieren", "bei einer Eröffnung, einer Variante oder einer Auswahl legt sie ins Archiv ganz unten auf der Startseite. Dort werden sie nicht abgefragt, zählen nicht bei „fällig“ und „neu“, fehlen in den Playlists, und ihre Züge gelten beim Üben nicht mehr als „andere Variante“. Eine angepinnte Eröffnung wird gelöst.")

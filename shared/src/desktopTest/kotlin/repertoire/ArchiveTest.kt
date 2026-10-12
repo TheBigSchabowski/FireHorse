@@ -117,4 +117,15 @@ class ArchiveTest {
         val result = Exchange.import(text, Library(), Progress())
         assertEquals(mapOf("n" to true, "c" to false), result.library.variants.associate { it.id to it.archived })
     }
+
+    @Test
+    fun whatTheSearchShowsInTheArchiveCanBeBroughtBack() {
+        val vm = vm()
+        vm.archiveOpening("Sizilianisch")
+        vm.archiveOpening("Caro-Kann")
+        vm.search = "sizilianisch"
+        vm.restoreVariants(vm.shownArchive.single().variants)
+        assertEquals(listOf("Sizilianisch"), vm.library.groups().map { it.opening })
+        assertEquals(listOf("Caro-Kann"), vm.library.archivedGroups().map { it.opening })
+    }
 }

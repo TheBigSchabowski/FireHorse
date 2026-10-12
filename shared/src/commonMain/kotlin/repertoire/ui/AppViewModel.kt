@@ -1476,6 +1476,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
 
     fun restoreVariant(id: String) = setArchived(setOf(id), false)
 
+    /** Back from the archive: these [variants], e.g. those of an opening the search shows. */
+    fun restoreVariants(variants: List<Variant>) = setArchived(variants.map { it.id }.toSet(), false)
+
     private fun archive(ids: Set<String>) {
         if (ids.isEmpty()) return
         setArchived(ids, true)

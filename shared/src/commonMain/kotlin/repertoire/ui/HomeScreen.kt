@@ -494,9 +494,20 @@ private fun ArchivedOpening(vm: AppViewModel, group: OpeningGroup, searching: Bo
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    if (searching) return
+    if (searching) {
+        // Bringing back is harmless, so it stays while searching: what the search shows of the opening.
+        TextButton(onClick = { vm.restoreVariants(group.variants) }) {
+            Text(
+                when {
+                    count == all -> if (count == 1) "Zurückholen" else "Alle $count zurückholen"
+                    else -> "Diese $count zurückholen"
+                },
+            )
+        }
+        return
+    }
     FlowRow {
-        TextButton(onClick = { vm.restoreOpening(group.opening) }) { Text(if (count == 1) "Zurückholen" else "Alle zurückholen") }
+        TextButton(onClick = { vm.restoreOpening(group.opening) }) { Text(if (count == 1) "Zurückholen" else "Alle $count zurückholen") }
         if (vm.canTransfer) TextButton(onClick = { vm.export(group.opening, archived = true) }) { Text("Exportieren") }
         if (confirmDelete) {
             TextButton(onClick = { vm.deleteOpening(group.opening, archived = true) }) {
