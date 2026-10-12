@@ -33,6 +33,9 @@ expect fun launchEngine(path: String): UciIo
 /** The program files in [dir] (and one folder down) that could be engines; the folder is made if it is missing. */
 expect fun engineFilesIn(dir: String): List<String>
 
+/** How many processor cores (hardware threads) this computer has, for the engine's threads. */
+expect fun processorCount(): Int
+
 /** A score as the engine gives it, from White's point of view: centipawns, or a mate in so many moves (negative: Black mates). */
 data class Score(val cp: Int? = null, val mate: Int? = null) {
     /** "+0,31", "−1,20", "#3", "#−2" */

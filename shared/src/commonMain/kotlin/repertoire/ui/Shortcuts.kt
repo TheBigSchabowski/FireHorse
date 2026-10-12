@@ -209,6 +209,9 @@ fun Settings.keyOf(command: Command): Char = keys[command.name]?.firstOrNull() ?
 /** "Strg+B", or whichever letter was chosen instead of the B. */
 val Settings.prefixLabel: String get() = "Strg+" + prefixKey.uppercase()
 
+/** "Strg+B Shift+R": the engine as opponent, on Shift and the key of the engine. */
+val Settings.opponentLabel: String get() = "$prefixLabel Shift+${keyOf(Command.ENGINE).uppercaseChar()}"
+
 /** "Strg+B p": the whole shortcut of [command] on the keyboard. */
 fun Settings.shortcutLabel(command: Command): String = "$prefixLabel ${keyOf(command)}"
 
@@ -328,7 +331,12 @@ class ShortcutKeys(private val vm: AppViewModel) {
         val command = Command.SHORTCUTS.takeIf { char == '?' || event.key == Key.Slash }
             ?: Command.entries.firstOrNull { settings.keyOf(it) == char }
             ?: Command.SHORTCUTS.takeIf { char == 'h' }
-        if (command != null) vm.run(command, fromKeyboard = true) else vm.openKeys(char)
+        when {
+            // Ctrl+B Shift+R: the engine as opponent, beside Ctrl+B r for its analysis.
+            command == Command.ENGINE && event.isShiftPressed -> vm.openOpponent()
+            command != null -> vm.run(command, fromKeyboard = true)
+            else -> vm.openKeys(char)
+        }
         return true
     }
 
@@ -501,6 +509,7 @@ private fun ShortcutList(vm: AppViewModel, touch: Boolean) {
                     }
                     ShortcutRow(key, command.label) { vm.run(command) }
                 }
+                if (!touch) ShortcutRow(vm.library.settings.opponentLabel, "Engine als Gegner: spielt im Editor eine Seite weiter", vm::openOpponent)
                 Spacer(Modifier.height(12.dp))
                 for ((key, label) in if (touch) OTHER_TOUCH else OTHER_KEYS) ShortcutRow(key, label, null)
             }

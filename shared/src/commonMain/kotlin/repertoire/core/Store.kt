@@ -42,6 +42,8 @@ data class Settings(
     val engines: List<EngineEntry> = emptyList(),
     /** The [EngineEntry.path] of the engine that analyses; the first one if empty or gone. */
     val engine: String = "",
+    /** How deep the engine as opponent in the editor (Ctrl+B Shift+R) searches each of its moves, as last chosen. */
+    val opponentDepth: Int = 18,
 ) {
     /** The engine that analyses, if any is set up. */
     val chosenEngine: EngineEntry? get() = engines.firstOrNull { it.path == engine } ?: engines.firstOrNull()

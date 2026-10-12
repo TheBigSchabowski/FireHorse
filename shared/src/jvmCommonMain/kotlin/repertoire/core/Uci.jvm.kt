@@ -64,3 +64,5 @@ actual fun engineFilesIn(dir: String): List<String> {
         f.isFile && !f.isHidden && f.canExecute() && f.extension.lowercase() !in NOT_ENGINES
     }.map { it.absolutePath }.sorted()
 }
+
+actual fun processorCount(): Int = Runtime.getRuntime().availableProcessors()

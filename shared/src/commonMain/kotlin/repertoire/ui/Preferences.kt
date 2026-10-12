@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.RadioButton
 import repertoire.core.EngineEntry
+import repertoire.core.processorCount
 import repertoire.core.Explorer
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -419,29 +420,42 @@ private fun EngineSettings(vm: AppViewModel, settings: Settings) {
     error?.let { Text(it, color = Color(0xFFE57373), style = MaterialTheme.typography.bodyMedium) }
 }
 
-/** How hard one engine works: lines, depth, threads, hash. */
+/** How hard one engine works: lines, depth, threads, hash; each by − and + or typed. */
 @Composable
 private fun EngineOptions(vm: AppViewModel, e: EngineEntry) {
     Column(Modifier.padding(start = 48.dp, bottom = 12.dp)) {
         Text("Linien")
-        Stepper("${e.lines}", onMinus = { vm.setEngineLines(e.path, e.lines - 1) }, onPlus = { vm.setEngineLines(e.path, e.lines + 1) },
-            minusEnabled = e.lines > 1, plusEnabled = e.lines < 5)
+        NumberStepper(
+            vm, e.lines, ENGINE_LINES, onValue = { vm.setEngineLines(e.path, it) },
+            onMinus = { vm.setEngineLines(e.path, e.lines - 1) }, onPlus = { vm.setEngineLines(e.path, e.lines + 1) },
+        )
         Spacer(Modifier.height(8.dp))
         Text("Tiefe")
-        Stepper(
-            if (e.depth == 0) "unbegrenzt" else "${e.depth}",
+        NumberStepper(
+            vm, e.depth, ENGINE_DEPTH, onValue = { vm.setEngineDepth(e.path, it) },
             onMinus = { vm.stepEngineDepth(e.path, -1) }, onPlus = { vm.stepEngineDepth(e.path, 1) },
-            minusEnabled = e.depth != 0, plusEnabled = e.depth != ENGINE_DEPTHS.last(),
+            zeroLabel = "unbegrenzt", fieldWidth = 120,
         )
-        Hint("Unbegrenzt rechnet die Engine weiter, bis sich die Stellung ändert; mit einer Tiefe hört sie dort auf und die Linien bleiben stehen.")
+        Hint(
+            "Leer (unbegrenzt) rechnet die Engine weiter, bis sich die Stellung ändert; mit einer Tiefe hört sie dort auf und die Linien bleiben stehen. " +
+                "− und + springen in Schritten, eintippen geht jede Tiefe bis ${ENGINE_DEPTH.last}.",
+        )
         Spacer(Modifier.height(8.dp))
         Text("Threads (Prozessorkerne)")
-        Stepper("${e.threads}", onMinus = { vm.setEngineThreads(e.path, e.threads - 1) }, onPlus = { vm.setEngineThreads(e.path, e.threads + 1) },
-            minusEnabled = e.threads > 1)
+        val cores = processorCount()
+        NumberStepper(
+            vm, e.threads, engineThreads(e.threads), onValue = { vm.setEngineThreads(e.path, it) },
+            onMinus = { vm.setEngineThreads(e.path, e.threads - 1) }, onPlus = { vm.setEngineThreads(e.path, e.threads + 1) },
+        )
+        Hint("Dieser Computer hat $cores Kerne. Alle zu nehmen macht die Engine am schnellsten, lässt aber für anderes wenig übrig; ${maxOf(1, cores - 2)} ist ein guter Wert.")
         Spacer(Modifier.height(8.dp))
         Text("Hash (Speicher)")
-        Stepper("${e.hashMb} MB", onMinus = { vm.setEngineHash(e.path, e.hashMb / 2) }, onPlus = { vm.setEngineHash(e.path, e.hashMb * 2) },
-            minusEnabled = e.hashMb > 16, plusEnabled = e.hashMb < 8192)
+        NumberStepper(
+            vm, e.hashMb, ENGINE_HASH_MB, onValue = { vm.setEngineHash(e.path, it) },
+            onMinus = { vm.setEngineHash(e.path, e.hashMb / 2) }, onPlus = { vm.setEngineHash(e.path, e.hashMb * 2) },
+            unit = "MB",
+        )
+        Hint("− und + halbieren und verdoppeln. Mehr Hash hilft vor allem bei großen Tiefen; mehr als die Hälfte des Arbeitsspeichers lohnt sich nicht.")
     }
 }
 
@@ -833,6 +847,12 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                     "${settings.shortcutLabel(Command.ENGINE)} lässt eine Engine auf diesem Computer die Stellung auf dem Brett rechnen: die besten Linien " +
                         "mit Bewertung aus Sicht von Weiß (+0,31 heißt Weiß steht etwas besser, #3 Matt in drei), immer tiefer, bis sich die Stellung ändert. " +
                         "Ein Klick auf eine Linie spielt ihren ersten Zug im Editor.",
+                )
+                Para(
+                    "${settings.opponentLabel} macht die Engine im Editor zum Gegner: wähle, welche Seite sie spielt (W / S) und wie tief sie für " +
+                        "jeden Zug rechnet (↑ ↓), Enter startet. Ab dann zieht sie für ihre Seite, sobald sie am Ende der Variante am Zug ist, und du " +
+                        "spielst nur noch die andere Farbe – z. B. die ersten Züge einer Eröffnung beidseitig eingeben, dann Weiß der Engine geben und " +
+                        "mit Schwarz weiterspielen. Zurückgehen lässt sie in Ruhe; ein anderer Zug dort, und sie antwortet darauf. Unter dem Brett: „Ändern“ und „Aus“.",
                 )
                 Para(
                     "FireHorse lädt keine Engine herunter. Unter Konfiguration → Engines gibst du den Pfad zu einer UCI-Engine an, " +

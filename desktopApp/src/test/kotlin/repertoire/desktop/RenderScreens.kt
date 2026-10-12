@@ -211,6 +211,19 @@ fun main() {
             vm.openKeys(null)
             vm.showKeys = false
         }
+        // The engine as opponent: the dialog, then the engine playing White after a few moves by hand.
+        render("gegner-dialog", only = mapOf("desktop" to (1200 to 820))) { vm ->
+            kotlinx.coroutines.runBlocking { vm.addEngine(engine) }
+            vm.newVariant()
+            for (m in listOf("e2e4", "c7c5", "g1f3", "d7d6")) vm.editorPlay(Move.fromUci(m))
+            vm.openOpponent()
+        }
+        render("gegner-spielt", waitMs = 4000, only = mapOf("desktop" to (1200 to 820))) { vm ->
+            kotlinx.coroutines.runBlocking { vm.addEngine(engine) }
+            vm.newVariant()
+            for (m in listOf("e2e4", "c7c5", "g1f3", "d7d6")) vm.editorPlay(Move.fromUci(m))
+            vm.setOpponent(repertoire.ui.EngineOpponent(white = true, depth = 14))
+        }
     }
     render("kuerzel") { vm ->
         vm.sample()
@@ -336,4 +349,6 @@ fun main() {
         vm.openHelp(HelpTopic.PLAYLIST)
     }
     println("Screens in ${out.absolutePath}")
+    // Compose leaves the AWT event thread running, which would keep the program alive.
+    kotlin.system.exitProcess(0)
 }

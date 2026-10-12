@@ -107,6 +107,7 @@ fun EditorScreen(vm: AppViewModel, e: EditorState, modifier: Modifier = Modifier
             }
             Spacer(Modifier.height(8.dp))
             Player(vm, e)
+            OpponentBar(vm, e)
             Spacer(Modifier.height(4.dp))
             Text(
                 when {

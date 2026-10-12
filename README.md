@@ -142,6 +142,7 @@ oder ganz ausschalten.
 | `Strg+B l` | Kürzel-Liste antippen | lichess-Eröffnungsdatenbank zur Stellung auf dem Brett (Meister oder lichess); ein Klick auf einen Zug spielt ihn im Editor |
 | `Strg+B e` | Kürzel-Liste antippen | Eröffnungsnotizen: eigene Notizen zur offenen Eröffnung, oder „Allgemein“ |
 | `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung (nur am Computer) |
+| `Strg+B Shift+R` | – | Engine als Gegner im Editor: Seite (Weiß/Schwarz) und Tiefe pro Zug wählen, dann zieht sie für diese Seite, du spielst die andere (nur am Computer) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
@@ -176,8 +177,16 @@ Unter Einstellungen → Konfiguration → Engines den Pfad zu einer UCI-Engine a
 Computer ist (z. B. Stockfish; die von En Croissant liegt am Mac unter
 `~/Library/Application Support/org.encroissant.app/engines/stockfish/stockfish-macos-universal`), oder die
 Datei in den Ordner `Engines` im Datenordner legen – dann steht sie dort zum Hinzufügen. Mehrere Engines
-lassen sich einrichten und wählen; jede hat ihre eigenen Linien, Tiefe (unbegrenzt oder fest), Threads und Hash. Test gegen eine echte Engine:
+lassen sich einrichten und wählen; jede hat ihre eigenen Linien, Tiefe (unbegrenzt oder fest), Threads und Hash. Alle vier
+lassen sich mit − und + in Schritten ändern oder direkt eintippen (Tiefe bis 99, leer = unbegrenzt; Threads bis zur Zahl der
+Kerne; Hash 16 MB bis 64 GB). Test gegen eine echte Engine:
 `FIREHORSE_TEST_ENGINE=/pfad/zu/stockfish ./gradlew :shared:desktopTest`.
+
+**Engine als Gegner:** Im Editor die ersten Züge beidseitig spielen, dann `Strg+B Shift+R`: wählen, welche
+Seite die Engine spielt (W/S oder ← →) und wie tief sie für jeden Zug rechnet (↑ ↓), Enter startet. Ab jetzt
+zieht sie für ihre Seite, sobald sie am Ende der Variante am Zug ist, und du spielst nur noch die andere Farbe.
+Zurückgehen in der Variante lässt sie in Ruhe; spielst du dort einen anderen Zug, antwortet sie darauf. Unter
+dem Brett steht, was sie gerade tut, mit „Ändern“ und „Aus“. Die Tiefe merkt sich FireHorse fürs nächste Mal.
 
 **Importieren** (Einstellungen → Konfiguration → Daten) fragt nach dem Öffnen der Datei: **Dazunehmen**
 – die Varianten der Datei kommen dazu, vorhandene mit gleicher Id werden aktualisiert, alles andere bleibt –

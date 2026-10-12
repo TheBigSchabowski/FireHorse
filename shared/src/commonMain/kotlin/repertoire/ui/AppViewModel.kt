@@ -44,6 +44,7 @@ import repertoire.core.Store
 import repertoire.core.Variant
 import repertoire.core.engineFilesIn
 import repertoire.core.launchEngine
+import repertoire.core.processorCount
 import repertoire.core.newId
 import repertoire.core.numberedSan
 import repertoire.core.toggle
@@ -204,6 +205,12 @@ class EditorState(
     /** The player is running: the cursor moves on by itself. */
     var playing by mutableStateOf(false)
 
+    /** The engine plays one side from here on (Ctrl+B Shift+R); null: both sides are played by hand. */
+    var opponent by mutableStateOf<EngineOpponent?>(null)
+
+    /** The board is at the tip of what has been played: the end of the line, or of the side line when in one. */
+    val atTip: Boolean get() = if (inSide) sideCursor >= side.size else atEnd
+
     /** Drawing mode of the board (three taps or Ctrl+B m). */
     val drawMode = mutableStateOf(false)
 
@@ -281,8 +288,19 @@ class PasteState(
     var error by mutableStateOf<String?>(null)
 }
 
-/** The depths the engine can be stopped at, 0 first: no limit. */
+/** The depths the − and + buttons step through, 0 first: no limit. Any other depth can be typed. */
 val ENGINE_DEPTHS = listOf(0, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40, 50)
+
+/** What can be set for an engine, by button or typed. Depth 0 is no limit. */
+val ENGINE_LINES = 1..5
+val ENGINE_DEPTH = 0..99
+val ENGINE_HASH_MB = 16..65536
+
+/** Threads: one up to the cores of this computer, or more if an engine already had more set. */
+fun engineThreads(current: Int = 1): IntRange = 1..maxOf(processorCount(), current)
+
+/** The engine as opponent in the editor: it plays [white] or Black, searching [depth] deep for each move. */
+data class EngineOpponent(val white: Boolean, val depth: Int)
 
 class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
     var library by mutableStateOf(store.loadLibrary())
@@ -621,16 +639,60 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         lib.copy(settings = lib.settings.copy(engines = lib.settings.engines.map { if (it.path == path) transform(it) else it }))
     }
 
-    fun setEngineLines(path: String, n: Int) = updateEngine(path) { it.copy(lines = n.coerceIn(1, 5)) }
+    fun setEngineLines(path: String, n: Int) = updateEngine(path) { it.copy(lines = n.coerceIn(ENGINE_LINES)) }
 
-    fun setEngineThreads(path: String, n: Int) = updateEngine(path) { it.copy(threads = n.coerceIn(1, 64)) }
+    fun setEngineThreads(path: String, n: Int) = updateEngine(path) { it.copy(threads = n.coerceIn(engineThreads(it.threads))) }
 
-    fun setEngineHash(path: String, mb: Int) = updateEngine(path) { it.copy(hashMb = mb.coerceIn(16, 8192)) }
+    fun setEngineHash(path: String, mb: Int) = updateEngine(path) { it.copy(hashMb = mb.coerceIn(ENGINE_HASH_MB)) }
 
-    /** [ENGINE_DEPTHS] step by step; 0 is no limit. */
-    fun stepEngineDepth(path: String, by: Int) = updateEngine(path) { e ->
-        val i = ENGINE_DEPTHS.indexOf(e.depth).coerceAtLeast(0)
-        e.copy(depth = ENGINE_DEPTHS[(i + by).coerceIn(0, ENGINE_DEPTHS.lastIndex)])
+    /** A depth typed in; 0 is no limit. */
+    fun setEngineDepth(path: String, depth: Int) = updateEngine(path) { it.copy(depth = depth.coerceIn(ENGINE_DEPTH)) }
+
+    /** [ENGINE_DEPTHS] step by step, from a typed depth to its neighbour; 0 is no limit. */
+    fun stepEngineDepth(path: String, by: Int) = updateEngine(path) { e -> e.copy(depth = stepIn(ENGINE_DEPTHS, e.depth, by)) }
+
+    // ---- The engine as opponent (Ctrl+B Shift+R) ------------------------------------------
+
+    /** The dialog that picks the engine's side and depth. */
+    var opponentDialog by mutableStateOf(false)
+
+    fun openOpponent() {
+        prefix = false
+        showShortcuts = false
+        prefs = null
+        if (editor == null) flash = "Die Engine als Gegner gibt es im Editor (neue Variante, Durchgehen oder Bearbeiten)." else opponentDialog = true
+    }
+
+    /** The engine plays [opponent] from now on in the open editor; null: off again. The depth is kept for next time. */
+    fun setOpponent(opponent: EngineOpponent?) {
+        opponentDialog = false
+        val e = editor ?: return
+        e.opponent = opponent
+        if (opponent != null && opponent.depth != library.settings.opponentDepth) {
+            updateLibrary { it.copy(settings = it.settings.copy(opponentDepth = opponent.depth)) }
+        }
+    }
+
+    /**
+     * It is the engine's move: its side is to move at the tip of the line, and nothing else has the
+     * board (the player, a drawing). Stepping back through the line never makes it move, so what
+     * comes after stays.
+     */
+    val opponentToMove: Boolean
+        get() {
+            val e = editor ?: return false
+            val o = e.opponent ?: return false
+            if (e.playing || e.drawingAt != null || e.drawMode.value || !e.atTip) return false
+            val position = e.position
+            return position.whiteToMove == o.white && position.legalMoves().isNotEmpty()
+        }
+
+    /** The engine's move [uci], found for [fen]: played if the board is still there and it is still its move. */
+    fun opponentPlay(fen: String, uci: String) {
+        val e = editor ?: return
+        if (!opponentToMove || e.position.fen != fen) return
+        val move = runCatching { Move.fromUci(uci) }.getOrNull()?.takeIf(e.position::isLegal) ?: return
+        editorPlay(move)
     }
 
     // ---- Opening notes (Ctrl+B e) --------------------------------------------------------
