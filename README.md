@@ -247,3 +247,14 @@ die installierte App spielen, und Deinstallieren löscht den Lernfortschritt.
 | `shared` | Kotlin Multiplatform: Zuggenerator/SAN, Varianten und Puzzle-Logik, FSRS, gesamte Compose-Oberfläche |
 | `desktopApp` | Fenster, Tastatur, DMG- und DEB-Paket |
 | `androidApp` | Activity, Zurück-Taste, APK |
+
+## Lizenz und Dank
+
+FireHorse steht unter der [MIT-Lizenz](LICENSE): Jeder darf es forken, ändern und weitergeben,
+solange der Hinweis auf das Ursprungsprojekt erhalten bleibt. Ausgenommen sind die Schachfiguren
+(„cburnett“, GPLv2+).
+
+Ideen kamen von [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant),
+[lichess](https://lichess.org) und [Anki](https://apps.ankiweb.net); die Eröffnungsdatenbank ist die
+[Opening Explorer API](https://lichess.org/api#tag/Opening-Explorer) von lichess, die Wiederholungen
+plant [FSRS](https://github.com/open-spaced-repetition). Alles im Einzelnen steht in [CREDITS.md](CREDITS.md).
