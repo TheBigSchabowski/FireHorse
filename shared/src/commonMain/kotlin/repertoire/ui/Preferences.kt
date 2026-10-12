@@ -846,11 +846,11 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                 Para(
                     "${settings.shortcutLabel(Command.ENGINE)} lässt eine Engine auf diesem Computer die Stellung auf dem Brett rechnen: die besten Linien " +
                         "mit Bewertung aus Sicht von Weiß (+0,31 heißt Weiß steht etwas besser, #3 Matt in drei), immer tiefer, bis sich die Stellung ändert. " +
-                        "Ein Klick auf eine Linie spielt ihren ersten Zug im Editor.",
+                        "Ein Klick auf eine Linie spielt ihren ersten Zug im Editor, Shift+Klick die ganze Linie.",
                 )
                 Para(
                     "${settings.opponentLabel} macht die Engine im Editor zum Gegner: wähle, welche Seite sie spielt (W / S) und wie tief sie für " +
-                        "jeden Zug rechnet (↑ ↓), Enter startet. Ab dann zieht sie für ihre Seite, sobald sie am Ende der Variante am Zug ist, und du " +
+                        "jeden Zug rechnet (↑ ↓) und ob sie den besten, zweit- oder drittbesten Zug spielt (1 2 3), Enter startet. Ab dann zieht sie für ihre Seite, sobald sie am Ende der Variante am Zug ist, und du " +
                         "spielst nur noch die andere Farbe – z. B. die ersten Züge einer Eröffnung beidseitig eingeben, dann Weiß der Engine geben und " +
                         "mit Schwarz weiterspielen. Zurückgehen lässt sie in Ruhe; ein anderer Zug dort, und sie antwortet darauf. Unter dem Brett: „Ändern“ und „Aus“.",
                 )

@@ -160,6 +160,7 @@ internal val OTHER_KEYS = listOf(
     "8 + Tab" to "„@8. Ng4“ in der Theorie ergänzen, nochmal Tab für Schwarz",
     "Enter" to "Lücken prüfen, dann „Gut“ / „Weiter“",
     "Leertaste" to "„Gut“ / „Weiter“, wenn alles geprüft ist",
+    "Shift+Klick" to "auf eine Linie der Engine: die ganze Linie spielen statt nur ihres ersten Zugs",
     "Rechtsklick" to "Ziehen malt einen Pfeil aufs Brett, auf einem Feld einen Kreis",
     "+ Shift / Alt / beide" to "beim Zeichnen: Farbe 2 / 3 / 4",
 )

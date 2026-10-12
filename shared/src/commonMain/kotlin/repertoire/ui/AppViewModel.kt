@@ -299,8 +299,14 @@ val ENGINE_HASH_MB = 16..65536
 /** Threads: one up to the cores of this computer, or more if an engine already had more set. */
 fun engineThreads(current: Int = 1): IntRange = 1..maxOf(processorCount(), current)
 
-/** The engine as opponent in the editor: it plays [white] or Black, searching [depth] deep for each move. */
-data class EngineOpponent(val white: Boolean, val depth: Int)
+/** Which move the engine as opponent plays: the best, second best or third best. */
+val OPPONENT_RANKS = 1..3
+
+/**
+ * The engine as opponent in the editor: it plays [white] or Black, searching [depth] deep for each
+ * move, and plays its [rank]-best move (1 the best); with fewer moves to choose from, the worst of them.
+ */
+data class EngineOpponent(val white: Boolean, val depth: Int, val rank: Int = 1)
 
 class AppViewModel(private val store: Store, private val files: FilePicker? = null) {
     var library by mutableStateOf(store.loadLibrary())
@@ -574,12 +580,29 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         explorerCache[source to fen] ?: Explorer.fetch(source, fen, library.settings.lichessToken).also { explorerCache[source to fen] = it }
 
     /** A move clicked in the database or the engine's lines: played in the editor; a puzzle is not answered for you. */
-    fun playSuggested(uci: String) {
+    fun playSuggested(uci: String) = playSuggested(runCatching { Move.fromUci(uci) }.getOrNull())
+
+    /** A suggested [move]; null or not legal on the board (e.g. for a position that is gone): nothing is played. */
+    fun playSuggested(move: Move?) {
         val e = editor
         when {
             e == null -> flash = "Vorgeschlagene Züge spielen geht im Editor (Durchgehen oder Bearbeiten)."
             e.editedDrawing != null || e.drawMode.value -> flash = "Erst das Zeichnen beenden."
-            else -> editorPlay(Move.fromUci(uci))
+            move == null || !e.position.isLegal(move) -> flash = "Dieser Zug passt nicht zur Stellung auf dem Brett."
+            else -> editorPlay(move)
+        }
+    }
+
+    /** Shift+click on an engine line: all its moves in the editor, as far as they are legal on the board. */
+    fun playSuggestedLine(pv: List<String>) {
+        val e = editor
+        when {
+            e == null -> flash = "Vorgeschlagene Züge spielen geht im Editor (Durchgehen oder Bearbeiten)."
+            e.editedDrawing != null || e.drawMode.value -> flash = "Erst das Zeichnen beenden."
+            else -> for (uci in pv) {
+                val move = runCatching { Move.fromUci(uci) }.getOrNull()?.takeIf(e.position::isLegal) ?: break
+                editorPlay(move)
+            }
         }
     }
 
@@ -663,13 +686,14 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         if (editor == null) flash = "Die Engine als Gegner gibt es im Editor (neue Variante, Durchgehen oder Bearbeiten)." else opponentDialog = true
     }
 
-    /** The engine plays [opponent] from now on in the open editor; null: off again. The depth is kept for next time. */
+    /** The engine plays [opponent] from now on in the open editor; null: off again. Depth and rank are kept for next time. */
     fun setOpponent(opponent: EngineOpponent?) {
         opponentDialog = false
         val e = editor ?: return
         e.opponent = opponent
-        if (opponent != null && opponent.depth != library.settings.opponentDepth) {
-            updateLibrary { it.copy(settings = it.settings.copy(opponentDepth = opponent.depth)) }
+        val settings = library.settings
+        if (opponent != null && (opponent.depth != settings.opponentDepth || opponent.rank != settings.opponentRank)) {
+            updateLibrary { it.copy(settings = it.settings.copy(opponentDepth = opponent.depth, opponentRank = opponent.rank)) }
         }
     }
 
@@ -930,8 +954,10 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
      * move just walks on, and a different one replaces the rest of the line from here. Durchgehen:
      * the same move walks on, a different one goes into a side line and the line stays.
      */
+    /** Plays [move] on the board; one that is not legal there is dropped, as it would break the line. */
     fun editorPlay(move: Move) {
         val e = editor ?: return
+        if (!e.position.isLegal(move)) return
         e.playing = false
         if (e.browsing) {
             when {

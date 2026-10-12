@@ -1,5 +1,6 @@
 package repertoire.core
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -26,6 +27,22 @@ data class ExplorerMove(
     val averageRating: Int? = null,
 ) {
     val games: Long get() = white + draws + black
+
+    /**
+     * This move on [position], or null if it is not legal there. Goes by the SAN first; lichess
+     * writes castling in the UCI as the king taking its rook ("e1h1"), which is turned into the
+     * king's two steps ("e1g1").
+     */
+    fun moveIn(position: Position): Move? {
+        position.parseSan(san)?.let { return it }
+        val move = runCatching { Move.fromUci(uci) }.getOrNull() ?: return null
+        val king = position.pieceAt(move.from)
+        val rook = position.pieceAt(move.to)
+        val castles = king != null && king.lowercaseChar() == 'k' && rook != null && rook.lowercaseChar() == 'r' &&
+            king.isUpperCase() == rook.isUpperCase() && move.from / 8 == move.to / 8
+        val played = if (castles) Move(move.from, move.from + if (move.to > move.from) 2 else -2) else move
+        return played.takeIf(position::isLegal)
+    }
 }
 
 @Serializable
@@ -73,6 +90,9 @@ object Explorer {
         check(token.isNotBlank()) { "Für die Datenbank braucht lichess deinen API-Schlüssel (siehe Konfiguration)." }
         val response = try {
             httpGet(url(source, fen), token.trim())
+        } catch (e: CancellationException) {
+            // The board moved on: not a connection problem.
+            throw e
         } catch (e: Exception) {
             throw IllegalStateException("Keine Verbindung zu lichess (${e.message ?: e::class.simpleName}).")
         }

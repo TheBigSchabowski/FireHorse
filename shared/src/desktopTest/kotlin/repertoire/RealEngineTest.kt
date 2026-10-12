@@ -7,6 +7,7 @@ import repertoire.core.EngineSession
 import repertoire.core.Position
 import repertoire.core.launchEngine
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -34,6 +35,23 @@ class RealEngineTest {
             seen = emptyList()
             withTimeoutOrNull(1500) { session.analyse(Position.START) { seen = it } }
             assertTrue(seen.isNotEmpty() && Position.START.isLegal(repertoire.core.Move.fromUci(seen.first().pv.first())))
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
+    fun theOpponentFindsItsSecondAndThirdBestMove() = runBlocking {
+        val path = path ?: return@runBlocking
+        val session = EngineSession(launchEngine(path))
+        try {
+            session.start(mapOf("Threads" to "2", "Hash" to "64", "MultiPV" to "3"))
+            var found = emptyList<EngineLine>()
+            session.analyse(Position.START, 10) { found = it }
+            assertEquals(3, found.size, "drei Linien am Ende: $found")
+            assertTrue(found.all { it.depth == 10 }, "alle auf Tiefe 10: $found")
+            val moves = (1..3).map { repertoire.ui.opponentMove(found, it) }
+            assertEquals(3, moves.toSet().size, "drei verschiedene Züge: $moves")
         } finally {
             session.close()
         }

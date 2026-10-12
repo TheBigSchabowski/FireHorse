@@ -33,6 +33,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.awaitCancellation
+import repertoire.core.EngineLine
 import repertoire.core.EngineSession
 import repertoire.core.launchEngine
 import repertoire.core.processorCount
@@ -45,9 +46,17 @@ private val OPPONENT_DEPTH = 1..ENGINE_DEPTH.last
 
 private fun stepDepth(depth: Int, by: Int): Int = stepIn(OPPONENT_DEPTHS, depth, by)
 
+/** "beste", "zweitbeste", "drittbeste": which of its moves the engine as opponent plays. */
+fun rankWord(rank: Int): String = when (rank) {
+    1 -> "beste"
+    2 -> "zweitbeste"
+    else -> "drittbeste"
+}
+
 /**
- * Ctrl+B Shift+R in the editor: which side the engine plays from here on, and how deep it searches
- * each move. Keys: W / S (or ← →) the side, ↑ ↓ (or + −) the depth, Enter starts, A turns it off.
+ * Ctrl+B Shift+R in the editor: which side the engine plays from here on, how deep it searches
+ * each move and which of its moves it plays. Keys: W / S (or ← →) the side, ↑ ↓ (or + −) the depth,
+ * 1 2 3 the best, second or third best move, Enter starts, A turns it off.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,8 +68,9 @@ fun OpponentDialog(vm: AppViewModel) {
     // The side to move by default: the engine goes on from the position on the board.
     var white by remember { mutableStateOf(current?.white ?: e?.position?.whiteToMove ?: true) }
     var depth by remember { mutableStateOf(current?.depth ?: settings.opponentDepth.coerceIn(OPPONENT_DEPTH)) }
+    var rank by remember { mutableStateOf(current?.rank ?: settings.opponentRank.coerceIn(OPPONENT_RANKS)) }
     val usable = e != null && engine != null && !LocalTouch.current
-    val start = { if (usable) vm.setOpponent(EngineOpponent(white, depth)) }
+    val start = { if (usable) vm.setOpponent(EngineOpponent(white, depth, rank)) }
     val focus = remember { FocusRequester() }
 
     AlertDialog(
@@ -76,6 +86,10 @@ fun OpponentDialog(vm: AppViewModel) {
                         Key.S, Key.DirectionRight -> white = false
                         Key.DirectionUp, Key.Plus, Key.NumPadAdd -> depth = stepDepth(depth, 1)
                         Key.DirectionDown, Key.Minus, Key.NumPadSubtract -> depth = stepDepth(depth, -1)
+                        // Digits in the depth field are the depth.
+                        Key.One, Key.NumPad1 -> if (!vm.typing) rank = 1 else return@onPreviewKeyEvent false
+                        Key.Two, Key.NumPad2 -> if (!vm.typing) rank = 2 else return@onPreviewKeyEvent false
+                        Key.Three, Key.NumPad3 -> if (!vm.typing) rank = 3 else return@onPreviewKeyEvent false
                         Key.Enter, Key.NumPadEnter -> start()
                         Key.A -> if (current != null) vm.setOpponent(null) else return@onPreviewKeyEvent false
                         Key.Escape -> vm.opponentDialog = false
@@ -117,6 +131,17 @@ fun OpponentDialog(vm: AppViewModel) {
                         )
                         Hint("Eintippen geht jede Tiefe bis ${OPPONENT_DEPTH.last}; ↑ ↓ springen in Schritten, Enter startet.")
                         Spacer(Modifier.height(12.dp))
+                        Text("Sie spielt", fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (r in OPPONENT_RANKS) {
+                                FilterChip(selected = rank == r, onClick = { rank = r }, label = { Text("$r. ($r)") })
+                            }
+                        }
+                        Hint(
+                            "Der ${rankWord(rank)} Zug nach ihrer Rechnung. Mit dem zweit- oder drittbesten Zug spielt sie " +
+                                "Nebenvarianten, auf die du auch vorbereitet sein willst. Hat sie weniger Züge zur Wahl, nimmt sie den schlechtesten davon.",
+                        )
+                        Spacer(Modifier.height(12.dp))
                         Text("Kerne und Speicher", fontWeight = FontWeight.SemiBold)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Threads", modifier = Modifier.width(72.dp))
@@ -155,7 +180,8 @@ fun OpponentDialog(vm: AppViewModel) {
 
 /**
  * Under the board while the engine plays a side: what it does, and the engine itself. It runs as
- * long as this is on screen; when it is its move, it searches to the depth and plays the best move.
+ * long as this is on screen; when it is its move, it searches to the depth with as many lines as
+ * the rank needs and plays the first move of that line.
  */
 @Composable
 fun OpponentBar(vm: AppViewModel, e: EditorState) {
@@ -167,12 +193,12 @@ fun OpponentBar(vm: AppViewModel, e: EditorState) {
     var searching by remember { mutableStateOf<Int?>(null) }
 
     if (engine != null && !LocalTouch.current) {
-        LaunchedEffect(engine.path, engine.threads, engine.hashMb) {
+        LaunchedEffect(engine.path, engine.threads, engine.hashMb, opponent.rank) {
             error = null
             session = null
             val s = try {
                 EngineSession(launchEngine(engine.path)).also {
-                    it.start(mapOf("Threads" to engine.threads.toString(), "Hash" to engine.hashMb.toString(), "MultiPV" to "1"))
+                    it.start(mapOf("Threads" to engine.threads.toString(), "Hash" to engine.hashMb.toString(), "MultiPV" to opponent.rank.toString()))
                 }
             } catch (ex: IllegalStateException) {
                 error = ex.message
@@ -194,15 +220,13 @@ fun OpponentBar(vm: AppViewModel, e: EditorState) {
             val s = session ?: return@LaunchedEffect
             if (!toMove) return@LaunchedEffect
             searching = 0
-            var best: String? = null
+            var found = emptyList<EngineLine>()
             s.analyse(position, opponent.depth) { lines ->
-                lines.firstOrNull()?.let {
-                    searching = it.depth
-                    best = it.pv.firstOrNull()
-                }
+                found = lines
+                lines.firstOrNull()?.let { searching = it.depth }
             }
             searching = null
-            best?.let { vm.opponentPlay(position.fen, it) }
+            opponentMove(found, opponent.rank)?.let { vm.opponentPlay(position.fen, it) }
         }
     }
 
@@ -221,7 +245,8 @@ fun OpponentBar(vm: AppViewModel, e: EditorState) {
     Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "♞ ${engine?.name ?: "Engine"} spielt $side · Tiefe ${opponent.depth} · $status",
+            "♞ ${engine?.name ?: "Engine"} spielt $side · Tiefe ${opponent.depth}" +
+                (if (opponent.rank > 1) " · ${rankWord(opponent.rank)}r Zug" else "") + " · $status",
             style = MaterialTheme.typography.bodyMedium,
             color = if (error != null) Color(0xFFE57373) else Color(0xFF90CAF9),
             modifier = Modifier.weight(1f, fill = false),
@@ -230,6 +255,10 @@ fun OpponentBar(vm: AppViewModel, e: EditorState) {
         TextButton(onClick = { vm.setOpponent(null) }) { Text("Aus") }
     }
 }
+
+/** The move to play from the engine's [lines]: the first of line [rank], or of the last line if there are fewer. */
+fun opponentMove(lines: List<EngineLine>, rank: Int): String? =
+    (lines.firstOrNull { it.multipv == rank } ?: lines.lastOrNull())?.pv?.firstOrNull()
 
 @Composable
 private fun Hint(text: String) {

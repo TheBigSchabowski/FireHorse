@@ -42,6 +42,7 @@ import repertoire.core.Explorer
 import repertoire.core.ExplorerResult
 import repertoire.core.ExplorerSource
 import repertoire.core.Library
+import repertoire.core.Position
 
 private sealed interface Lookup {
     data object Loading : Lookup
@@ -80,7 +81,7 @@ fun ExplorerPanel(vm: AppViewModel, modifier: Modifier = Modifier, handle: Modif
             }
             Spacer(Modifier.height(8.dp))
             val token = vm.library.settings.lichessToken
-            val fen = vm.boardPosition?.fen
+            val position = vm.boardPosition
             when {
                 token.isBlank() -> {
                     Hint(
@@ -89,16 +90,18 @@ fun ExplorerPanel(vm: AppViewModel, modifier: Modifier = Modifier, handle: Modif
                     )
                     TextButton(onClick = vm::openConfig) { Text("Schlüssel eintragen") }
                 }
-                fen == null -> Hint("Die Datenbank zeigt die Stellung auf dem Brett – öffne eine Variante oder ein Puzzle.")
-                else -> ExplorerTable(vm, vm.explorerSource, fen)
+                position == null -> Hint("Die Datenbank zeigt die Stellung auf dem Brett – öffne eine Variante oder ein Puzzle.")
+                else -> ExplorerTable(vm, vm.explorerSource, position)
             }
         }
     }
 }
 
 @Composable
-private fun ExplorerTable(vm: AppViewModel, source: ExplorerSource, fen: String) {
-    var lookup by remember { mutableStateOf<Lookup>(Lookup.Loading) }
+private fun ExplorerTable(vm: AppViewModel, source: ExplorerSource, position: Position) {
+    val fen = position.fen
+    // Per position: what was found for the last one is never shown for this one, not even for a moment.
+    var lookup by remember(source, fen) { mutableStateOf<Lookup>(Lookup.Loading) }
     LaunchedEffect(source, fen) {
         lookup = Lookup.Loading
         lookup = try {
@@ -123,7 +126,7 @@ private fun ExplorerTable(vm: AppViewModel, source: ExplorerSource, fen: String)
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     for (m in r.moves) {
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { vm.playSuggested(m.uci) }
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { vm.playSuggested(m.moveIn(position)) }
                                 .padding(vertical = 4.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

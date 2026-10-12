@@ -141,8 +141,8 @@ oder ganz ausschalten.
 | `Strg+B d` | Kürzel-Liste antippen | PGN mit allem einfügen: Züge, Namen, Theorie und Zeichnungen kommen zurück (auch aus lichess) |
 | `Strg+B l` | Kürzel-Liste antippen | lichess-Eröffnungsdatenbank zur Stellung auf dem Brett (Meister oder lichess); ein Klick auf einen Zug spielt ihn im Editor |
 | `Strg+B e` | Kürzel-Liste antippen | Eröffnungsnotizen: eigene Notizen zur offenen Eröffnung, oder „Allgemein“ |
-| `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung (nur am Computer) |
-| `Strg+B Shift+R` | – | Engine als Gegner im Editor: Seite (Weiß/Schwarz) und Tiefe pro Zug wählen, dann zieht sie für diese Seite, du spielst die andere (nur am Computer) |
+| `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung; Klick spielt den ersten Zug einer Linie, Shift+Klick die ganze Linie (nur am Computer) |
+| `Strg+B Shift+R` | – | Engine als Gegner im Editor: Seite (Weiß/Schwarz), Tiefe pro Zug und bester/zweit-/drittbester Zug wählen, dann zieht sie für diese Seite, du spielst die andere (nur am Computer) |
 | `Strg+B f` | 4 Schritte halten | FEN einfügen |
 | `Strg+B m` | 1 Schritt halten | Zeichenmodus an/aus (kurze Zeichnung, nur für den Moment) |
 | `Strg+B n` | Kürzel-Liste antippen | Zeichnung zum Abfragen an dieser Stellung an/aus (im Editor) |
@@ -183,10 +183,11 @@ Kerne; Hash 16 MB bis 64 GB). Test gegen eine echte Engine:
 `FIREHORSE_TEST_ENGINE=/pfad/zu/stockfish ./gradlew :shared:desktopTest`.
 
 **Engine als Gegner:** Im Editor die ersten Züge beidseitig spielen, dann `Strg+B Shift+R`: wählen, welche
-Seite die Engine spielt (W/S oder ← →) und wie tief sie für jeden Zug rechnet (↑ ↓), Enter startet. Ab jetzt
+Seite die Engine spielt (W/S oder ← →), wie tief sie für jeden Zug rechnet (↑ ↓) und ob sie den besten,
+zweit- oder drittbesten Zug spielt (1 2 3 – gut, um auch auf Nebenvarianten vorbereitet zu sein), Enter startet. Ab jetzt
 zieht sie für ihre Seite, sobald sie am Ende der Variante am Zug ist, und du spielst nur noch die andere Farbe.
 Zurückgehen in der Variante lässt sie in Ruhe; spielst du dort einen anderen Zug, antwortet sie darauf. Unter
-dem Brett steht, was sie gerade tut, mit „Ändern“ und „Aus“. Die Tiefe merkt sich FireHorse fürs nächste Mal.
+dem Brett steht, was sie gerade tut, mit „Ändern“ und „Aus“. Tiefe und Zugwahl merkt sich FireHorse fürs nächste Mal.
 
 **Importieren** (Einstellungen → Konfiguration → Daten) fragt nach dem Öffnen der Datei: **Dazunehmen**
 – die Varianten der Datei kommen dazu, vorhandene mit gleicher Id werden aktualisiert, alles andere bleibt –

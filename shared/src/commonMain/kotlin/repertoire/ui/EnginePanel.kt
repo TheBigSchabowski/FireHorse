@@ -28,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +45,7 @@ import repertoire.core.launchEngine
 /**
  * A chess engine on this computer analysing the board (Ctrl+B r): the best few lines with their
  * score, deeper and deeper until the position changes. The engine runs only while the window is
- * open; a click on a line plays its first move in the editor.
+ * open; a click on a line plays its first move in the editor, Shift+click the whole line.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -128,9 +131,17 @@ private fun Analysis(vm: AppViewModel, engine: EngineEntry) {
             val depth = lines.first().depth
             Hint("Tiefe $depth" + if (limit > 0) (if (depth >= limit) " – fertig" else " von $limit") else "")
             Spacer(Modifier.height(4.dp))
+            // Whether Shift was held as the line was clicked: seen on the way in, before the click takes it.
+            var shift by remember { mutableStateOf(false) }
             for (line in lines) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { line.pv.firstOrNull()?.let(vm::playSuggested) }
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) shift = awaitPointerEvent(PointerEventPass.Initial).keyboardModifiers.isShiftPressed
+                            }
+                        }
+                        .clickable { if (shift) vm.playSuggestedLine(line.pv) else line.pv.firstOrNull()?.let(vm::playSuggested) }
                         .padding(vertical = 3.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

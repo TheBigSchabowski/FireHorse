@@ -44,6 +44,8 @@ data class Settings(
     val engine: String = "",
     /** How deep the engine as opponent in the editor (Ctrl+B Shift+R) searches each of its moves, as last chosen. */
     val opponentDepth: Int = 18,
+    /** Which of its moves the engine as opponent plays: 1 the best, 2 the second best, 3 the third best; as last chosen. */
+    val opponentRank: Int = 1,
 ) {
     /** The engine that analyses, if any is set up. */
     val chosenEngine: EngineEntry? get() = engines.firstOrNull { it.path == engine } ?: engines.firstOrNull()

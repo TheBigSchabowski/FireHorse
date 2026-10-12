@@ -12,7 +12,11 @@ import repertoire.core.Move
 import repertoire.core.Store
 import repertoire.ui.AppViewModel
 import repertoire.ui.ENGINE_DEPTHS
+import repertoire.core.EngineLine
+import repertoire.core.ExplorerMove
+import repertoire.core.Score
 import repertoire.ui.EngineOpponent
+import repertoire.ui.opponentMove
 import repertoire.ui.stepIn
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,6 +94,59 @@ class OpponentTest {
         vm.setOpponent(null)
         assertNull(vm.editor!!.opponent)
         assertFalse(vm.opponentToMove)
+    }
+
+    @Test
+    fun theRankIsKeptAndPicksItsLine() {
+        val vm = editorWith("e2e4")
+        vm.setOpponent(EngineOpponent(white = false, depth = 12, rank = 3))
+        assertEquals(3, vm.library.settings.opponentRank)
+        val lines = listOf(
+            EngineLine(1, 12, Score(cp = 30), listOf("c7c5", "g1f3")),
+            EngineLine(2, 12, Score(cp = 25), listOf("e7e5")),
+            EngineLine(3, 12, Score(cp = 20), listOf("e7e6")),
+        )
+        assertEquals("c7c5", opponentMove(lines, 1))
+        assertEquals("e7e5", opponentMove(lines, 2))
+        assertEquals("e7e6", opponentMove(lines, 3))
+        // Fewer moves to choose from: the worst of them.
+        assertEquals("e7e5", opponentMove(lines.take(2), 3))
+        assertNull(opponentMove(emptyList(), 2))
+    }
+
+    @Test
+    fun shiftClickPlaysTheWholeLineAsFarAsItIsLegal() {
+        val vm = editorWith("e2e4")
+        vm.playSuggestedLine(listOf("c7c5", "g1f3", "d7d6", "a1a8", "d2d4"))
+        assertEquals(listOf("e2e4", "c7c5", "g1f3", "d7d6"), vm.editor!!.moves.map { it.uci })
+        assertEquals(4, vm.editor!!.cursor)
+    }
+
+    @Test
+    fun lichessCastlingAsKingTakesRookIsPlayedAsCastling() {
+        val vm = editorWith("e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6")
+        val position = vm.editor!!.position
+        // As lichess sends it: the king onto its rook.
+        val castles = ExplorerMove(uci = "e1h1", san = "O-O")
+        assertEquals("e1g1", castles.moveIn(position)?.uci)
+        // Even if the SAN were missing, the UCI alone is turned into castling.
+        assertEquals("e1g1", ExplorerMove(uci = "e1h1", san = "").moveIn(position)?.uci)
+        vm.playSuggested(castles.moveIn(position))
+        assertEquals("e1g1", vm.editor!!.moves.last().uci)
+        assertEquals('R', vm.editor!!.position.pieceAt(5))
+    }
+
+    @Test
+    fun aMoveThatDoesNotFitTheBoardIsNotPlayedAndDoesNotBreakTheLine() {
+        val vm = editorWith("e2e4", "e7e5")
+        vm.playSuggested("e1h1")
+        vm.playSuggested("zz")
+        vm.playSuggested(ExplorerMove(uci = "d7d5", san = "d5").moveIn(vm.editor!!.position))
+        vm.editorPlay(Move.fromUci("e2e4"))
+        assertEquals(listOf("e2e4", "e7e5"), vm.editor!!.moves.map { it.uci })
+        assertNotNull(vm.flash)
+        // The board can still be drawn.
+        assertEquals(2, vm.editor!!.position.fullmoveNumber)
     }
 
     @Test
