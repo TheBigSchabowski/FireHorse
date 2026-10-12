@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The chess piece images ("cburnett" set by Colin M.L. Burnett, in
-tools/pieces-svg/ and rendered from them in
-shared/src/commonMain/composeResources/drawable/ and the app icons) are not
-covered by the MIT License above; they keep their own license, GPLv2 or later.
-See CREDITS.md.
