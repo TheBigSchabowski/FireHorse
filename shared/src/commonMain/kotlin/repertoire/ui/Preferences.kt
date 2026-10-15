@@ -53,6 +53,7 @@ import androidx.compose.material3.RadioButton
 import repertoire.core.EngineEntry
 import repertoire.core.processorCount
 import repertoire.core.Explorer
+import repertoire.core.GameTree
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.geometry.Offset
@@ -94,7 +95,7 @@ enum class HelpTopic(val title: String, val summary: String, val touch: Boolean?
     HORSE("Das Pferd", "Kürzel am Handy: antippen und halten", touch = true),
     TAP_ZONES("Doppeltippen", "Bereiche des Bildschirms für Kürzel, Raster frei wählbar", touch = true),
     KEYBOARD("Tastenkürzel", "Strg+B und die übrigen Tasten, eigene Belegung", touch = false),
-    LICHESS("Datenbank, Engine und Notizen", "lichess-Eröffnungsdatenbank, Engines wie Stockfish, eigene Eröffnungsnotizen"),
+    LICHESS("Datenbank, Engine und Notizen", "lichess-Eröffnungsdatenbank, eigene Partien als Baum (wie openingtree), Engines wie Stockfish, eigene Eröffnungsnotizen"),
     DATA("Speichern und Übertragen", "Wo alles liegt, Export und Import"),
     ;
 
@@ -853,6 +854,18 @@ private fun HelpPage(vm: AppViewModel, prefs: Prefs.Help, touch: Boolean) {
                     "(kein Häkchen nötig) und in der Konfiguration unter „lichess“ einfügen. Jeder nimmt seinen eigenen; er bleibt auf dem Gerät.",
             )
             ConfigButton(vm, "Schlüssel eintragen")
+            SubHeading("Eigene Partien (wie openingtree)")
+            Para(
+                "Der dritte Reiter „Partien“ zeigt statt der Datenbank die Partien eines Spielers als Baum, wie openingtree.com: " +
+                    "welche Züge er in jeder Stellung gespielt hat, wie oft, wie die Partien ausgingen, dazu die Partien, die herausstechen " +
+                    "(zuletzt gespielt, bester Sieg, schlimmste Niederlage – ein Klick öffnet sie). Die Partien kommen von lichess oder " +
+                    "chess.com (Kontoname, Farbe, Tempo, wie viele; beide geben sie ohne Anmeldung heraus) oder aus einer PGN-Datei. " +
+                    "In den Baum kommen die ersten ${GameTree.MAX_PLIES / 2} Züge jeder Partie; er bleibt gespeichert, bis du andere Partien lädst.",
+            )
+            Para(
+                "„Als .tree speichern“ schreibt den Baum so, dass openingtree.com ihn mit „Load tree“ öffnet, und „openingtree-Datei öffnen“ " +
+                    "liest einen dort gespeicherten Baum. Ein Klick auf einen Zug spielt ihn im Editor, wie bei der Datenbank.",
+            )
             if (!touch) {
                 SubHeading("Engine")
                 Para(

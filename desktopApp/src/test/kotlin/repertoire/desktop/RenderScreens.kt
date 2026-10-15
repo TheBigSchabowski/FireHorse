@@ -31,11 +31,12 @@ fun main() {
         waitMs: Long = 0,
         only: Map<String, Pair<Int, Int>> = sizes,
         files: repertoire.core.FilePicker? = null,
+        saved: (Store) -> Unit = {},
         setup: (AppViewModel) -> Unit,
     ) {
         for ((label, size) in only) {
             val dir = Files.createTempDirectory("puzzle").toFile()
-            val vm = AppViewModel(Store(DirectoryStore(dir)), files).also(setup)
+            val vm = AppViewModel(Store(DirectoryStore(dir)).also(saved), files).also(setup)
             val (w, h) = size
             ImageComposeScene(w * 2, h * 2, Density(2f)) { App(vm, touch = label == "phone") }.use { scene ->
                 // Images load on the first frames; render a few before taking the picture.
@@ -189,6 +190,28 @@ fun main() {
         vm.sample()
         vm.editVariant(vm.library.variants.first(), fromStart = true)
         repeat(4) { vm.editorStepForward() }
+        vm.run(Command.EXPLORER)
+    }
+    render("partien-formular") { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.first(), fromStart = true)
+        vm.explorerSource = repertoire.core.ExplorerSource.GAMES
+        vm.treeRequest = vm.treeRequest.copy(player = "DrNykterstein")
+        vm.run(Command.EXPLORER)
+    }
+    render("partien-baum", saved = { store ->
+        val tree = repertoire.core.GameTree(repertoire.core.TreeRequest(player = "Ich", white = true))
+        val lines = listOf("e4 c5 Nf3 d6 d4", "e4 c5 Nf3 Nc6 d4", "e4 c5 Nc3 Nc6", "e4 e5 Nf3 Nc6 Bb5", "e4 e6 d4 d5", "e4 c5 Nf3 e6 d4")
+        lines.forEachIndexed { i, line ->
+            val result = listOf("1-0", "0-1", "1/2-1/2")[i % 3]
+            tree.add(repertoire.core.TreeGame("Ich", "Gegner $i", 1500, 1450 + 40 * i, result, "2026.0${i + 1}.15", "https://lichess.org/x$i"), line.split(" "))
+        }
+        store.saveGameTree(tree)
+    }) { vm ->
+        vm.sample()
+        vm.editVariant(vm.library.variants.first(), fromStart = true)
+        repeat(1) { vm.editorStepForward() }
+        vm.explorerSource = repertoire.core.ExplorerSource.GAMES
         vm.run(Command.EXPLORER)
     }
     render("durchgehen-nebenstrang") { vm ->

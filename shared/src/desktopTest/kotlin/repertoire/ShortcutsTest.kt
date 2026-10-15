@@ -447,7 +447,7 @@ class ShortcutsTest {
     }
 
     @Test
-    fun eightTurnsTheBoardInTheEditorForGoodAndInAPuzzleForThisVariant() {
+    fun eightSwitchesTheSideInTheEditorAndTurnsTheBoardInAPuzzle() {
         val vm = app()
         val eight = KeyEvent(Key.Eight, KeyEventType.KeyDown, '8'.code)
         assertTrue(vm.shortcutKeys.handleDirect(eight))
@@ -457,23 +457,27 @@ class ShortcutsTest {
         vm.addVariant("Sizilianisch", "e4", "c5")
         vm.addVariant("Sizilianisch", "e4", "c5", "Nf3")
         vm.editVariant(vm.library.variants.first())
+        val saved = vm.library.variants.first()
+        val other = vm.library.variants.last()
         vm.shortcutKeys.handleDirect(eight)
-        assertTrue(vm.editorFlipped)
-        // The side the variant is played from stays.
-        assertTrue(vm.editor!!.playWhite == vm.library.variants.first().playWhite)
-        vm.cancelEditor()
-        vm.editVariant(vm.library.variants.last())
-        assertTrue(vm.editorFlipped, "im Editor bleibt es gedreht")
+        assertEquals(!saved.playWhite, vm.editor!!.playWhite, "im Editor wechselt die Seite")
+        // Same moves: the learning state would stay.
+        assertFalse(vm.editorRestartsProgress())
+        vm.saveEditor()
+        assertEquals(!saved.playWhite, vm.library.variants.first { it.id == saved.id }.playWhite)
+        assertEquals(other.playWhite, vm.library.variants.first { it.id == other.id }.playWhite, "nur diese Variante")
+        vm.editVariant(vm.library.variants.first { it.id == saved.id })
         vm.shortcutKeys.handleDirect(eight)
-        assertFalse(vm.editorFlipped)
+        assertEquals(saved.playWhite, vm.editor!!.playWhite)
         vm.cancelEditor()
 
         // Typing an 8 into a text field turns nothing.
         vm.newVariant()
         val field = Any()
         vm.typingIn += field
+        val side = vm.editor!!.playWhite
         assertFalse(vm.shortcutKeys.handleDirect(eight))
-        assertFalse(vm.editorFlipped)
+        assertEquals(side, vm.editor!!.playWhite)
         vm.typingIn -= field
         vm.cancelEditor()
 

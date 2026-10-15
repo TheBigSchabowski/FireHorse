@@ -22,6 +22,8 @@ class MainActivity : ComponentActivity() {
 
     private var pendingSave: Pair<String, (String?) -> Unit>? = null
     private var pendingOpen: ((String?) -> Unit)? = null
+    private var pendingSaveBytes: Pair<ByteArray, (String?) -> Unit>? = null
+    private var pendingOpenBytes: ((ByteArray?) -> Unit)? = null
 
     private val createDocument = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val (text, onDone) = pendingSave ?: return@registerForActivityResult
@@ -37,6 +39,21 @@ class MainActivity : ComponentActivity() {
         onDone(uri?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes().decodeToString() } })
     }
 
+    // Game trees (.tree) are binary; PGN files come under many types, so any file may be picked.
+    private val createBinary = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val (bytes, onDone) = pendingSaveBytes ?: return@registerForActivityResult
+        pendingSaveBytes = null
+        if (uri == null) return@registerForActivityResult onDone(null)
+        contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+        onDone(displayName(uri))
+    }
+
+    private val openBinary = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val onDone = pendingOpenBytes ?: return@registerForActivityResult
+        pendingOpenBytes = null
+        onDone(uri?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes() } })
+    }
+
     private val picker = object : FilePicker {
         override fun save(suggestedName: String, text: String, onDone: (String?) -> Unit) {
             pendingSave = text to onDone
@@ -47,6 +64,16 @@ class MainActivity : ComponentActivity() {
             pendingOpen = onDone
             // Some file managers label .json as octet-stream or text.
             openDocument.launch(arrayOf("application/json", "application/octet-stream", "text/*"))
+        }
+
+        override fun saveBytes(suggestedName: String, bytes: ByteArray, onDone: (String?) -> Unit) {
+            pendingSaveBytes = bytes to onDone
+            createBinary.launch(suggestedName)
+        }
+
+        override fun openBytes(extensions: List<String>, onDone: (ByteArray?) -> Unit) {
+            pendingOpenBytes = onDone
+            openBinary.launch(arrayOf("*/*"))
         }
     }
 

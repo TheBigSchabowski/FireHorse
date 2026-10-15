@@ -33,6 +33,11 @@ kotlin {
             implementation("org.jetbrains.compose.components:components-resources:1.11.1")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
         }
+        // The Main dispatcher on the desktop (Swing's event thread), for work the app starts in the background;
+        // Android brings its own. Same version as the coroutines Compose uses.
+        named("desktopMain").dependencies {
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             // runTest for the engine session; the same version Compose brings along.

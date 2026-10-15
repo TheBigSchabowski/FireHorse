@@ -1,5 +1,6 @@
 package repertoire.core
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -8,6 +9,8 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import java.util.zip.DeflaterOutputStream
+import java.util.zip.InflaterInputStream
 
 class DirectoryStore(private val dir: File) : FileStore {
     override val location: String get() = dir.absolutePath
@@ -40,3 +43,11 @@ actual fun shortDate(epochMillis: Long): String =
     SHORT_DATE.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
 
 actual fun newId(): String = UUID.randomUUID().toString().take(8)
+
+actual fun zlibDeflate(data: ByteArray): ByteArray {
+    val out = ByteArrayOutputStream()
+    DeflaterOutputStream(out).use { it.write(data) }
+    return out.toByteArray()
+}
+
+actual fun zlibInflate(data: ByteArray): ByteArray = InflaterInputStream(data.inputStream()).use { it.readBytes() }

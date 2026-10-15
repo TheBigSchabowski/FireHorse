@@ -125,8 +125,9 @@ Am Computer erst `Strg+B`, dann eine Taste (wie bei tmux). `Strg+B ?` oder einfa
 aller Kürzel; darin blättern ↑ ↓ (←/→ seitenweise), `Shift+S` oder `Esc` schließt sie wieder.
 `Strg+N` und dann eine Ziffer startet „Playlist lernen“ der Eröffnung an dieser Stelle der Startseite
 (`1` die erste, angepinnte zuerst, bis `9`); unten steht dabei, welche Nummer welche Eröffnung ist.
-`8` dreht das Brett: im Editor bleibt es gedreht, bis du wieder `8` drückst, beim Üben bis zur nächsten
-Variante. Gedreht wird nur die Ansicht, die Seite, die du spielst, bleibt.
+`8` im Editor schaltet die Seite der Variante um (Weiß ↔ Schwarz, wie „Ich spiele“), mit „Speichern“ übernommen; die
+Züge bleiben, also auch der Lernstand. So kann eine Eröffnung wie Sizilianisch Varianten für beide Seiten haben, und die
+Suche (`weiß`/`schwarz`) findet sie danach. Beim Üben dreht `8` nur das Brett, bis zur nächsten Variante.
 `Shift+S`, `Shift+A`, `Strg+N` und `8` gelten nicht, solange der Cursor in einem Textfeld steht; dort wird getippt.
 Passt ein Buchstabe nicht, lässt er sich unter Einstellungen → Konfiguration → Tastenkürzel ändern
 (auf die Taste klicken, die neue drücken; eine schon vergebene tauscht mit), ebenso das B nach Strg.
@@ -152,7 +153,7 @@ oder ganz ausschalten.
 | `Strg+B p` | Kürzel-Liste antippen | Alles kopieren: die ganze Variante als PGN mit Eröffnung, Name, Theorie und Zeichnungen (als `[%cal]`/`[%csl]` wie bei lichess) |
 | `Strg+B o` | Kürzel-Liste antippen | Alles bis zur Stellung kopieren: Züge und Zeichnungen bis zum Brett, die Theorie ganz |
 | `Strg+B d` | Kürzel-Liste antippen | PGN mit allem einfügen: Züge, Namen, Theorie und Zeichnungen kommen zurück (auch aus lichess) |
-| `Strg+B l` | Kürzel-Liste antippen | lichess-Eröffnungsdatenbank zur Stellung auf dem Brett (Meister oder lichess); ein Klick auf einen Zug spielt ihn im Editor |
+| `Strg+B l` | Kürzel-Liste antippen | Eröffnungsdatenbank zur Stellung auf dem Brett: Meister, lichess oder eigene Partien (wie openingtree); ein Klick auf einen Zug spielt ihn im Editor |
 | `Strg+B e` | Kürzel-Liste antippen | Eröffnungsnotizen: eigene Notizen zur offenen Eröffnung, oder „Allgemein“ |
 | `Strg+B s` | Kürzel-Liste antippen | Suchfeld auf der Startseite aus- und wieder einblenden (eingeblendet mit dem Cursor darin) |
 | `Strg+B r` | – | Engine rechnet die Stellung auf dem Brett: beste Linien mit Bewertung; Klick spielt den ersten Zug einer Linie, Shift+Klick die ganze Linie (nur am Computer) |
@@ -186,7 +187,17 @@ Abbrechen geht es mit dem Puzzle weiter. Eine angefangene Variante im Editor wir
 Einstellungen → Konfiguration → lichess einfügen. Jeder nimmt seinen eigenen; er bleibt auf dem Gerät
 und kommt nicht mit in Exporte.
 
-**Engines:** FireHorse lädt keine Engine herunter und fragt nichts im Netz außer der lichess-Datenbank.
+**Eigene Partien (wie [openingtree](https://www.openingtree.com)):** Der Reiter „Partien“ im Datenbank-Fenster
+(`Strg+B l`) zeigt die Partien eines Spielers als Baum: welche Züge in jeder Stellung gespielt wurden, wie oft, wie sie
+ausgingen (Ergebnisbalken, Punkte in %, Ø Gegner), dazu die zuletzt gespielte Partie, den besten Sieg und die schlimmste
+Niederlage (ein Klick öffnet sie auf lichess/chess.com). Die Partien lädt FireHorse selbst, ohne Umweg über openingtree:
+von **lichess** oder **chess.com** (Kontoname, Farbe, Tempo, nur gewertete, höchstens wie viele – die neuesten zuerst;
+beide geben sie ohne Anmeldung heraus, mit lichess-Schlüssel geht es schneller) oder aus einer **PGN-Datei** (optional nur die
+Partien eines Spielers). In den Baum kommen die ersten 30 Züge jeder Partie; er bleibt im Datenordner (`partien.json`), bis
+andere Partien geladen werden. **Als .tree speichern** schreibt eine Datei, die openingtree.com mit „Load tree“ öffnet,
+und **openingtree-Datei öffnen** liest einen dort gespeicherten Baum – so geht ein Baum in beide Richtungen.
+
+**Engines:** FireHorse lädt keine Engine herunter und fragt im Netz nur lichess (Datenbank, Partien) und chess.com (Partien).
 Unter Einstellungen → Konfiguration → Engines den Pfad zu einer UCI-Engine angeben, die schon auf dem
 Computer ist (z. B. Stockfish; die von En Croissant liegt am Mac unter
 `~/Library/Application Support/org.encroissant.app/engines/stockfish/stockfish-macos-universal`), oder die
@@ -255,6 +266,6 @@ solange der Hinweis auf das Ursprungsprojekt erhalten bleibt. Ausgenommen sind d
 („cburnett“, GPLv2+).
 
 Ideen kamen von [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant),
-[lichess](https://lichess.org) und [Anki](https://apps.ankiweb.net); die Eröffnungsdatenbank ist die
+[lichess](https://lichess.org), [openingtree](https://github.com/openingtree/openingtree) und [Anki](https://apps.ankiweb.net); die Eröffnungsdatenbank ist die
 [Opening Explorer API](https://lichess.org/api#tag/Opening-Explorer) von lichess, die Wiederholungen
 plant [FSRS](https://github.com/open-spaced-repetition). Alles im Einzelnen steht in [CREDITS.md](CREDITS.md).

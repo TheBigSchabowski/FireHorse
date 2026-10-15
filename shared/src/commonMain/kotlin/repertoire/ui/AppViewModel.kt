@@ -7,7 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import repertoire.core.Cloze
 import repertoire.core.Drawing
@@ -19,6 +25,11 @@ import repertoire.core.ExplorerResult
 import repertoire.core.ExplorerSource
 import repertoire.core.Exchange
 import repertoire.core.FilePicker
+import repertoire.core.GameSite
+import repertoire.core.GameSources
+import repertoire.core.GameTree
+import repertoire.core.OpeningTreeFile
+import repertoire.core.TreeRequest
 import repertoire.core.Fsrs
 import repertoire.core.Ink
 import repertoire.core.Grade
@@ -404,17 +415,19 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
         }
     }
 
-    /** The editor's board turned round with 8: stays so for every variant until 8 again. */
-    var editorFlipped by mutableStateOf(false)
-
     /**
-     * 8: turns the board on screen round. Only what is seen: the side the variant is played from
-     * stays. In the editor it stays turned; in a puzzle until the next variant.
+     * 8. In the editor: the variant is played from the other side (saved with "Speichern"; the
+     * learning state stays, the moves are the same), so one opening can have variants for White and
+     * for Black. In a puzzle: only the board on screen turns round, until the next variant.
      */
     fun flipBoard() {
         val s = session
+        val e = editor
         when {
-            editor != null -> editorFlipped = !editorFlipped
+            e != null -> {
+                e.playWhite = !e.playWhite
+                flash = "Du spielst diese Variante jetzt mit " + (if (e.playWhite) "Weiß" else "Schwarz") + " – mit „Speichern“ übernehmen."
+            }
             s?.attempt != null -> s.flipped = !s.flipped
             else -> flash = "Drehen geht, sobald ein Brett zu sehen ist."
         }
@@ -605,6 +618,99 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
             else -> for (uci in pv) {
                 val move = runCatching { Move.fromUci(uci) }.getOrNull()?.takeIf(e.position::isLegal) ?: break
                 editorPlay(move)
+            }
+        }
+    }
+
+    // ---- One's own games as a tree, like openingtree.com ("Partien" in the database window) ----
+
+    /** The games of one player as a tree of positions; null until one is loaded. Kept in "partien.json". */
+    var gameTree by mutableStateOf(store.loadGameTree())
+        private set
+
+    /** What the form for a new tree says; it stays filled in while the window is closed. */
+    var treeRequest by mutableStateOf(gameTree?.request ?: TreeRequest())
+
+    /** The form for other games is shown instead of the tree. */
+    var treeFormOpen by mutableStateOf(false)
+
+    /** How many games are in the tree being built; null while nothing is loading. */
+    var treeLoading by mutableStateOf<Int?>(null)
+        private set
+
+    /** Why the last tree could not be built. */
+    var treeError by mutableStateOf<String?>(null)
+
+    /** Downloads go on when the window is closed; only [cancelTree] stops them. */
+    private val scope by lazy { MainScope() }
+    private var treeJob: Job? = null
+
+    /** Builds the tree [treeRequest] asks for: downloads from lichess or chess.com, or opens a PGN file for it. */
+    fun loadTree() {
+        val request = treeRequest.copy(player = treeRequest.player.trim())
+        if (request.site == GameSite.PGN_FILE) {
+            val picker = files ?: return
+            picker.openBytes(listOf("pgn")) { bytes ->
+                if (bytes != null) buildTree { progress -> GameSources.fromPgn(request, bytes.decodeToString(), progress) }
+            }
+        } else {
+            val token = library.settings.lichessToken
+            buildTree { progress -> GameSources.download(request, token, progress) }
+        }
+    }
+
+    /** Opens a tree saved by openingtree.com (or by FireHorse). */
+    fun importTree() {
+        val picker = files ?: return
+        picker.openBytes(listOf(OpeningTreeFile.EXTENSION)) { bytes ->
+            if (bytes != null) buildTree { OpeningTreeFile.read(bytes) }
+        }
+    }
+
+    /** Saves the tree as a ".tree" file that openingtree.com can load. */
+    fun exportTree() {
+        val tree = gameTree ?: return
+        val picker = files ?: return
+        scope.launch {
+            val bytes = withContext(Dispatchers.Default) { OpeningTreeFile.write(tree) }
+            picker.saveBytes(OpeningTreeFile.fileName(tree), bytes) { file ->
+                if (file != null) flash = "Baum gespeichert: $file"
+            }
+        }
+    }
+
+    fun cancelTree() {
+        treeJob?.cancel()
+    }
+
+    /** Forgets the tree; the games stay where they came from. */
+    fun clearTree() {
+        cancelTree()
+        gameTree = null
+        treeFormOpen = false
+        store.saveGameTree(null)
+    }
+
+    private fun buildTree(work: suspend (progress: (Int) -> Unit) -> GameTree) {
+        treeJob?.cancel()
+        treeError = null
+        treeLoading = 0
+        treeJob = scope.launch {
+            try {
+                val tree = withContext(Dispatchers.Default) {
+                    work { n -> if (n % 10 == 0) treeLoading = n }.also { store.saveGameTree(it) }
+                }
+                gameTree = tree
+                treeRequest = tree.request
+                treeFormOpen = false
+                flash = "${tree.games.size} Partien im Baum."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IllegalArgumentException) {
+                treeError = e.message ?: "Das hat nicht geklappt."
+            } finally {
+                // A newer tree may already be loading in its place.
+                if (treeJob === coroutineContext[Job]) treeLoading = null
             }
         }
     }

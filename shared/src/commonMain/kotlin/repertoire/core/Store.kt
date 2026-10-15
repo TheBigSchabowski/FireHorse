@@ -129,8 +129,16 @@ class Store(private val files: FileStore) {
 
     fun saveProgress(progress: Progress) = files.write("progress.json", json.encodeToString(progress))
 
-    private inline fun <reified T> read(name: String): T? {
-        val text = files.read(name) ?: return null
+    /** One's own games as a tree (from lichess, chess.com, a PGN or an openingtree file); null if none was loaded. */
+    fun loadGameTree(): GameTree? = read("partien.json", compact)
+
+    /** Thousands of positions: written without spaces and without what is left at its default. */
+    fun saveGameTree(tree: GameTree?) = files.write("partien.json", if (tree == null) "" else compact.encodeToString(tree))
+
+    private val compact = Json { ignoreUnknownKeys = true }
+
+    private inline fun <reified T> read(name: String, json: Json = this.json): T? {
+        val text = files.read(name)?.takeIf { it.isNotBlank() } ?: return null
         return try {
             json.decodeFromString<T>(text)
         } catch (e: Exception) {

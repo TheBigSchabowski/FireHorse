@@ -227,6 +227,39 @@ object Pgn {
         return parseGame(games.first()).copy(otherGames = games.size - 1)
     }
 
+    /** One game of a PGN file: its headers and its main line in SAN, as written. */
+    class Game(val headers: Map<String, String>, val moves: List<String>) {
+        /** It begins at a set-up position (or is no standard chess) instead of at the start. */
+        val setUp: Boolean
+            get() = headers["FEN"]?.isNotBlank() == true && runCatching { Position.fromFen(headers.getValue("FEN")) }.getOrNull()?.fen != Position.START_FEN ||
+                headers["Variant"]?.let { it.isNotBlank() && !it.equals("standard", ignoreCase = true) } == true
+    }
+
+    /**
+     * Every game of a PGN file, for a tree of games: headers and main-line moves, unchecked (the tree
+     * stops a game at a move that does not fit). Comments, side lines, move numbers and results fall away.
+     */
+    fun games(text: String): List<Game> {
+        val cleaned = text.replace(' ', ' ').replace(' ', ' ').replace("﻿", "")
+        if (cleaned.isBlank()) return emptyList()
+        return split(cleaned).mapNotNull { game ->
+            val headers = HEADER.findAll(game).associate { it.groupValues[1] to it.groupValues[2].trim() }
+            var body = HEADER.replace(game, " ")
+            body = REST_OF_LINE.replace(body, " ")
+            body = BRACE_COMMENT.replace(body, " ")
+            while (INNERMOST_VARIATION.containsMatchIn(body)) body = INNERMOST_VARIATION.replace(body, " ")
+            body = NAG.replace(body, " ")
+            val moves = body.split(WHITESPACE)
+                .map { it.replace(MOVE_NUMBER, "") }
+                .filter { it.isNotEmpty() && it !in GAME_RESULTS }
+            if (headers.isEmpty() && moves.isEmpty()) null else Game(headers, moves)
+        }
+    }
+
+    private val WHITESPACE = Regex("\\s+")
+    private val MOVE_NUMBER = Regex("^\\d+\\.+")
+    private val GAME_RESULTS = setOf("*", "1-0", "0-1", "1/2-1/2", "½-½")
+
     private fun split(text: String): List<String> {
         val starts = GAME_START.findAll(text).map { it.range.first }.toList()
         if (starts.size <= 1) return listOf(text)

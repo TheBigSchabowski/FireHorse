@@ -87,11 +87,11 @@ private fun windowIcon(): Painter? =
 private object DialogFilePicker : FilePicker {
     private var lastDir: String = UserDirs.downloads().path
 
-    private fun choose(title: String, mode: Int, name: String? = null): File? {
+    private fun choose(title: String, mode: Int, name: String? = null, extensions: List<String> = listOf("json")): File? {
         val dialog = FileDialog(null as Frame?, title, mode)
         dialog.directory = lastDir
         name?.let { dialog.file = it }
-        if (mode == FileDialog.LOAD) dialog.setFilenameFilter { _, n -> n.endsWith(".json", ignoreCase = true) }
+        if (mode == FileDialog.LOAD) dialog.setFilenameFilter { _, n -> extensions.any { n.endsWith(".$it", ignoreCase = true) } }
         dialog.isVisible = true
         val file = dialog.file ?: return null
         lastDir = dialog.directory
@@ -106,5 +106,15 @@ private object DialogFilePicker : FilePicker {
 
     override fun open(onDone: (String?) -> Unit) {
         onDone(choose("Importieren", FileDialog.LOAD)?.readText())
+    }
+
+    override fun saveBytes(suggestedName: String, bytes: ByteArray, onDone: (String?) -> Unit) {
+        val file = choose("Speichern", FileDialog.SAVE, suggestedName)
+        file?.writeBytes(bytes)
+        onDone(file?.path)
+    }
+
+    override fun openBytes(extensions: List<String>, onDone: (ByteArray?) -> Unit) {
+        onDone(choose("Öffnen", FileDialog.LOAD, extensions = extensions)?.readBytes())
     }
 }

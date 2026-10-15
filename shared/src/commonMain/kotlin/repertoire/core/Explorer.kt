@@ -10,10 +10,19 @@ class HttpResponse(val status: Int, val body: String)
 /** GETs [url], with [token] as "Bearer" if there is one; throws on no connection. Runs off the main thread. */
 expect suspend fun httpGet(url: String, token: String?): HttpResponse
 
+/**
+ * GETs [url] asking for [accept], and hands the answer to [onLine] line by line as it comes in, so a
+ * long download can show how far it got. Returns the HTTP status; the lines come only with a 2xx one.
+ */
+expect suspend fun httpLines(url: String, token: String?, accept: String, onLine: (String) -> Unit): Int
+
 /** lichess's opening database: the games of masters, or of lichess players. */
 enum class ExplorerSource(val label: String, val path: String) {
     MASTERS("Meister", "masters"),
     LICHESS("lichess", "lichess"),
+
+    /** Not lichess's: the games of one player, from [GameTree]. */
+    GAMES("Partien", ""),
 }
 
 /** One move of a position in the database, with how the games went on from there. */
@@ -25,6 +34,8 @@ data class ExplorerMove(
     val draws: Long = 0,
     val black: Long = 0,
     val averageRating: Int? = null,
+    /** From one's own games: how often the move was played here (the results count every game after it, transpositions too). */
+    val played: Long? = null,
 ) {
     val games: Long get() = white + draws + black
 
@@ -76,7 +87,7 @@ object Explorer {
         return "$BASE/${source.path}?$query"
     }
 
-    private fun encode(text: String): String = buildString {
+    internal fun encode(text: String): String = buildString {
         for (b in text.encodeToByteArray()) {
             val c = (b.toInt() and 0xFF).toChar()
             if (c.isLetterOrDigit() && c.code < 128 || c in "-_.~") append(c) else append("%" + (b.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0'))
