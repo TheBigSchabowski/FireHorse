@@ -1386,17 +1386,36 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
      */
     fun learnOpeningAt(number: Int) {
         val group = library.groups().getOrNull(number - 1)
-        when {
-            group == null -> flash = "Keine Eröffnung Nummer $number."
-            editorChanged() && editorInUse -> flash = "Erst die offene Variante speichern oder abbrechen."
-            else -> {
-                editor = null
-                paste = null
-                prefs = null
-                showShortcuts = false
-                learnPlaylist(group.opening)
-            }
+        if (group == null) flash = "Keine Eröffnung Nummer $number." else fromAnywhere { learnPlaylist(group.opening) }
+    }
+
+    /** A widget or shortcut on the phone: „Playlist lernen“ of [opening], from any screen. */
+    fun learnOpening(opening: String) {
+        if (variantsOf(opening).isEmpty()) flash = "Keine Eröffnung „$opening“ mehr – umbenannt, archiviert oder gelöscht?"
+        else fromAnywhere { learnPlaylist(opening) }
+    }
+
+    /** A widget on the phone: „Lernen“ of a playlist of one's own, from any screen. */
+    fun learnSavedPlaylistFromAnywhere(id: String) {
+        val p = savedPlaylist(id)
+        if (p == null || library.variantsOf(p).isEmpty()) flash = "Die Playlist ist leer oder gelöscht."
+        else fromAnywhere { learnSavedPlaylist(id) }
+    }
+
+    /** A widget or shortcut on the phone: „Lernen“ with spaced repetition, from any screen. */
+    fun startLearningFromAnywhere() = fromAnywhere(::startLearning)
+
+    /** Whatever is open makes way for [start]; a changed variant in the editor is not thrown away. */
+    private fun fromAnywhere(start: () -> Unit) {
+        if (editorChanged() && editorInUse) {
+            flash = "Erst die offene Variante speichern oder abbrechen."
+            return
         }
+        editor = null
+        paste = null
+        prefs = null
+        showShortcuts = false
+        start()
     }
 
     /**
@@ -1566,6 +1585,9 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** The archive at the bottom of the home screen is open. */
     var archiveOpen by mutableStateOf(false)
 
+    /** The playlists of one's own, below the archive, are open. */
+    var playlistsOpen by mutableStateOf(false)
+
     /** All variants of [opening] into the archive; the opening is no longer pinned. */
     fun archiveOpening(opening: String) = archive(variantsOf(opening).map { it.id }.toSet())
 
@@ -1630,6 +1652,11 @@ class AppViewModel(private val store: Store, private val files: FilePicker? = nu
     /** Shows a tick box at every variant; with [opening], its variants start out ticked. */
     fun startSelecting(opening: String? = null) {
         selected = opening?.let { o -> variantsOf(o).map { it.id }.toSet() } ?: emptySet()
+    }
+
+    /** A variant held down: selecting begins with it ticked. */
+    fun startSelectingVariant(id: String) {
+        selected = setOf(id)
     }
 
     fun endSelecting() {

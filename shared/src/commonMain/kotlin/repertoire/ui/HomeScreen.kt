@@ -1,6 +1,7 @@
 package repertoire.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -33,17 +34,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,8 +99,6 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 )
                 Spacer(Modifier.height(20.dp))
             }
-            // Picking variants is about the openings; the playlists wait above until it is done.
-            if (vm.library.active.isNotEmpty() && vm.selected == null && !searching) PlaylistSection(vm)
             val groups = vm.shownGroups
             if (searching && groups.isEmpty() && vm.shownArchive.isEmpty()) {
                 Text("Nichts gefunden.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -125,6 +128,8 @@ fun HomeScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(12.dp))
             }
             if (vm.selected == null) ArchiveSection(vm, searching)
+            // Picking variants is about the openings; the playlists wait below until it is done.
+            if (vm.library.active.isNotEmpty() && vm.selected == null && !searching) PlaylistSection(vm)
 
             vm.message?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium)
@@ -194,29 +199,42 @@ private fun SelectionBar(vm: AppViewModel, selected: Set<String>) {
     }
 }
 
-/** The playlists of one's own, above the openings, and the way to make a new one. */
+/**
+ * The playlists of one's own, below the archive and closed at first like it, so the openings stay
+ * at the top; and the way to make a new one.
+ */
 @Composable
 private fun PlaylistSection(vm: AppViewModel) {
+    val playlists = vm.library.playlists
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "MEINE PLAYLISTS",
+            "MEINE PLAYLISTS" + if (playlists.isNotEmpty()) "  ·  ${playlists.size}" else "",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = vm::newPlaylist) { Text("+ Neue Playlist") }
+        if (playlists.isNotEmpty()) {
+            TextButton(onClick = { vm.playlistsOpen = !vm.playlistsOpen }) { Text(if (vm.playlistsOpen) "Schließen" else "Öffnen") }
+        }
     }
-    if (vm.library.playlists.isEmpty()) {
-        Text(
-            "Stell dir Varianten aus beliebigen Eröffnungen zusammen: „+ Neue Playlist“, Varianten antippen, speichern.",
+    when {
+        playlists.isEmpty() -> Text(
+            "Stell dir Varianten aus beliebigen Eröffnungen zusammen: „+ Neue Playlist“, Varianten " +
+                (if (LocalTouch.current) "antippen" else "anklicken") + " (oder eine Variante lange drücken), speichern.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        !vm.playlistsOpen -> Text(
+            playlists.joinToString("  ·  ") { it.name },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        else -> for (p in playlists) {
+            Spacer(Modifier.height(8.dp))
+            PlaylistCard(vm, p)
+        }
     }
-    for (p in vm.library.playlists) {
-        Spacer(Modifier.height(8.dp))
-        PlaylistCard(vm, p)
-    }
+    TextButton(onClick = vm::newPlaylist) { Text("+ Neue Playlist") }
     Spacer(Modifier.height(20.dp))
 }
 
@@ -301,13 +319,17 @@ private fun OpeningHeader(vm: AppViewModel, group: OpeningGroup, searching: Bool
     var confirmDelete by remember(group.opening) { mutableStateOf(false) }
     val count = group.variants.size
     val all = vm.library.groups().firstOrNull { it.opening == group.opening }?.variants?.size ?: count
-    Text(group.opening, style = MaterialTheme.typography.titleLarge)
-    Text(
-        (if (all != count) "$count von $all " else "$count ") + (if (all == 1) "Variante" else "Varianten"),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
     val selected = vm.selected
+    // Held down: selecting begins with the whole opening ticked; not while searching, which hides some of it.
+    val hold = if (selected == null && !searching) Modifier.onHold(group.opening) { vm.startSelecting(group.opening) } else Modifier
+    Column(Modifier.fillMaxWidth().then(hold)) {
+        Text(group.opening, style = MaterialTheme.typography.titleLarge)
+        Text(
+            (if (all != count) "$count von $all " else "$count ") + (if (all == 1) "Variante" else "Varianten"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (selected != null) {
         val ticked = group.variants.all { it.id in selected }
         TextButton(onClick = { vm.toggleSelectedOpening(group.opening) }) { Text(if (ticked) "Keine auswählen" else "Alle auswählen") }
@@ -364,17 +386,20 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Text(v.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "$status  ·  ${if (v.playWhite) "Weiß" else "Schwarz"}" + if (v.setUp) "  ·  ab eigener Stellung" else "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                compactMoves(v.numberedSan()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Held down: selecting begins with this variant ticked. Only the text, so a held button is not also pressed.
+            Column(Modifier.fillMaxWidth().onHold(v.id) { vm.startSelectingVariant(v.id) }) {
+                Text(v.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "$status  ·  ${if (v.playWhite) "Weiß" else "Schwarz"}" + if (v.setUp) "  ·  ab eigener Stellung" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    compactMoves(v.numberedSan()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             // Wraps onto several lines on a phone instead of squeezing the text away.
             FlowRow {
                 if (review?.suspended == true) {
@@ -395,6 +420,19 @@ private fun VariantRow(vm: AppViewModel, v: Variant) {
                 }
             }
         }
+    }
+}
+
+/** Holding a finger (or the mouse button) down runs [action], with a short buzz on a phone. */
+@Composable
+private fun Modifier.onHold(key: Any, action: () -> Unit): Modifier {
+    val haptic = LocalHapticFeedback.current
+    val current by rememberUpdatedState(action)
+    return pointerInput(key) {
+        detectTapGestures(onLongPress = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            current()
+        })
     }
 }
 

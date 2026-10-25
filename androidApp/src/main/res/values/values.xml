@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FireHorse</string>
+    <string name="widget_name">FireHorse lernen</string>
+    <string name="widget_description">Ein Tipp, und die Eröffnung kommt als Puzzle</string>
     <color name="ic_launcher_background">#1B1B1F</color>
 </resources>

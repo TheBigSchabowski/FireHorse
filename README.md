@@ -52,8 +52,9 @@ installieren“ erlauben.
   `−`/`+` ändern die Zeit pro Zug (0,5 bis 5 s), „Wiederholen“ beginnt am Ende von vorn. Jeder Klick
   aufs Brett, auf einen Pfeil oder einen Zug hält den Player ebenfalls an.
 - **Playlists:** jede Eröffnung ist eine Playlist aus all ihren Varianten, dazu kommen eigene unter
-  „Meine Playlists“ (**+ Neue Playlist**: Varianten aus beliebigen Eröffnungen antippen, speichern,
-  Reihenfolge mit ↑/↓ ändern). Jede Playlist hat zwei Modi: **▶ Abspielen** zeigt die Stellungen,
+  „Meine Playlists“ ganz unten auf der Startseite, unter dem Archiv („Öffnen“ zeigt sie). **+ Neue
+  Playlist**: Varianten aus beliebigen Eröffnungen antippen, speichern, Reihenfolge mit ↑/↓ ändern.
+  So übst du mehrere Eröffnungen, die gerade dran sind, in einem Rutsch, auch per Widget. Jede Playlist hat zwei Modi: **▶ Abspielen** zeigt die Stellungen,
   die Varianten laufen nacheinander mit dem Player ab (die Endstellung bleibt kurz stehen;
   „← Vorherige“ / „Nächste →“ springen). **Lernen** fragt sie nacheinander als Puzzle ab, und zum
   nächsten geht es erst, wenn du das aktuelle ohne Fehler gelöst hast. Lernen mit Spaced Repetition
@@ -61,7 +62,8 @@ installieren“ erlauben.
 - **Anpinnen:** holt eine Eröffnung ganz nach oben auf der Startseite, bis zu drei gleichzeitig.
   „Lösen“ stellt sie wieder an ihren Platz.
 - **Auswählen:** zeigt an jeder Variante ein Kästchen; „Alle auswählen“ nimmt eine ganze Eröffnung
-  dazu. Die Auswahl lässt sich als Playlist speichern, abspielen, lernen, archivieren oder auf einmal löschen.
+  dazu. Schneller: eine Variante lange drücken (oder den Namen einer Eröffnung für alle ihre Varianten),
+  dann weitere antippen. Die Auswahl lässt sich als Playlist speichern, abspielen, lernen, archivieren oder auf einmal löschen.
   **Löschen** bei einer Eröffnung löscht sie samt allen Varianten (mit Rückfrage).
 - **Suchen:** das Feld unter den Zahlen auf der Startseite zeigt nur, worauf alle Begriffe passen (auch
   im Archiv). Züge gelten ab dem Anfang: `d4` findet die 1.d4-Eröffnungen, `e4 c5` findet 1.e4 c5,
@@ -84,6 +86,11 @@ installieren“ erlauben.
 - **Lernen:** fällige und neue Varianten (Spaced Repetition, FSRS). **Frei üben:** alle gemischt,
   ohne Wertung. **Üben** an einer Variante: nur diese. **Züge üben:** die Stellungen der
   Variante gemischt, jeweils nur den nächsten Zug finden.
+- **Widget (Android):** auf dem Startbildschirm lange drücken → Widgets → „FireHorse lernen“. Beim
+  Ablegen wählst du, was es starten soll: „Lernen“ (zeigt, wie viel fällig ist), eine Eröffnung oder
+  eine eigene Playlist. Ein Tipp darauf, und das Puzzle steht auf dem Brett. Ändern: Widget lange
+  drücken → Stift. Lange auf das App-Symbol drücken zeigt „Lernen“ und die ersten drei Eröffnungen
+  der Startseite als Verknüpfungen, die sich auch einzeln auf den Startbildschirm ziehen lassen.
 - **Theorie** (im Editor, Cmd/Strg+T): `((e6))` wird nach dem Lösen als Lücke abgefragt. `@8. Ng4`
   wird ein Link, der das Brett nach diesem Zug zeigt. Tipp `8` und Tab für den weißen Zug, nochmal
   Tab für den schwarzen.

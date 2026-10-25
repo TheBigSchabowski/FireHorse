@@ -1,5 +1,6 @@
 package repertoire.android
 
+import android.content.Intent
 import android.os.Bundle
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -10,15 +11,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.Modifier
-import repertoire.core.DirectoryStore
 import repertoire.core.FilePicker
-import repertoire.core.Store
 import repertoire.ui.App
 import repertoire.ui.AppViewModel
 
 class MainActivity : ComponentActivity() {
     // Survives rotation only as long as the process does; the progress itself is saved after every answer.
-    private val viewModel by lazy { AppViewModel(Store(DirectoryStore(filesDir)), picker) }
+    private val viewModel by lazy { AppViewModel(store(), picker) }
 
     private var pendingSave: Pair<String, (String?) -> Unit>? = null
     private var pendingOpen: ((String?) -> Unit)? = null
@@ -84,6 +83,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Started by a widget or a shortcut: straight into the puzzle. Not again after a rotation.
+        if (savedInstanceState == null) LearnTarget.of(intent)?.start(viewModel)
         enableEdgeToEdge()
         setContent {
             // Back leaves the preferences, the editor (which may sit on top of a puzzle), then the puzzle,
@@ -97,5 +98,18 @@ class MainActivity : ComponentActivity() {
             }
             App(viewModel, Modifier.safeDrawingPadding(), touch = true)
         }
+    }
+
+    /** A widget tapped while the app is open: the puzzle replaces whatever is on the screen. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        LearnTarget.of(intent)?.start(viewModel)
+    }
+
+    /** What the widgets and shortcuts show may have changed: new variants, fewer due. */
+    override fun onStop() {
+        super.onStop()
+        LearnWidget.refreshAll(this)
+        refreshShortcuts()
     }
 }
