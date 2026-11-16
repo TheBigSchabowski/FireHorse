@@ -84,6 +84,8 @@ private fun Analysis(vm: AppViewModel, engine: EngineEntry) {
     var session by remember { mutableStateOf<EngineSession?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var lines by remember { mutableStateOf<List<EngineLine>>(emptyList()) }
+    // The engine has finished this position. It says so itself; the depth alone does not, as the other lines may still be on their way.
+    var done by remember { mutableStateOf(false) }
 
     // The engine runs as long as this window shows it with these settings.
     LaunchedEffect(engine.path, engine.threads, engine.hashMb, engine.lines) {
@@ -115,9 +117,10 @@ private fun Analysis(vm: AppViewModel, engine: EngineEntry) {
     val position = vm.boardPosition
     LaunchedEffect(session, position?.fen, engine.depth) {
         lines = emptyList()
+        done = false
         val s = session ?: return@LaunchedEffect
         if (position == null || position.legalMoves().isEmpty()) return@LaunchedEffect
-        s.analyse(position, engine.depth.takeIf { it > 0 }) { lines = it }
+        done = s.analyse(position, engine.depth.takeIf { it > 0 }) { lines = it }
     }
 
     when {
@@ -129,7 +132,7 @@ private fun Analysis(vm: AppViewModel, engine: EngineEntry) {
         else -> {
             val limit = engine.depth
             val depth = lines.first().depth
-            Hint("Tiefe $depth" + if (limit > 0) (if (depth >= limit) " – fertig" else " von $limit") else "")
+            Hint("Tiefe $depth" + if (limit > 0) (if (done) " – fertig" else " von $limit") else "")
             Spacer(Modifier.height(4.dp))
             // Whether Shift was held as the line was clicked: seen on the way in, before the click takes it.
             var shift by remember { mutableStateOf(false) }

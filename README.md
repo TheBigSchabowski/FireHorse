@@ -214,6 +214,11 @@ lassen sich mit − und + in Schritten ändern oder direkt eintippen (Tiefe bis 
 Kerne; Hash 16 MB bis 64 GB). Test gegen eine echte Engine:
 `FIREHORSE_TEST_ENGINE=/pfad/zu/stockfish ./gradlew :shared:desktopTest`.
 
+Bei fester Tiefe steht „fertig“ da, sobald die Engine fertig ist und alle Linien diese Tiefe haben. Manche Engines hören
+von sich aus früher auf: Reckless mit mehreren Threads endet, sobald die meisten Threads so tief sind, meldet aber nur
+einen, der noch ein, zwei Tiefen zurückliegen kann. FireHorse lässt sie dann weiterrechnen, bis die Tiefe wirklich
+erreicht ist (beim ersten Mal kostet das eine zweite Suche, danach fragt es diese Engine gleich nach mehr).
+
 **Engine als Gegner:** Im Editor die ersten Züge beidseitig spielen, dann `Strg+B Shift+R`: wählen, welche
 Seite die Engine spielt (W/S oder ← →), wie tief sie für jeden Zug rechnet (↑ ↓) und ob sie den besten,
 zweit- oder drittbesten Zug spielt (1 2 3 – gut, um auch auf Nebenvarianten vorbereitet zu sein), Enter startet. Ab jetzt

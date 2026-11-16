@@ -42,6 +42,14 @@ class UciTest {
     private val afterE4 = Position.START.play(Position.START.parseSan("e4")!!)
 
     @Test
+    fun theRankOfALineIsKnownEvenForABound() {
+        assertEquals(2, Uci.rank("info depth 12 multipv 2 score cp 20 lowerbound pv e2e4"))
+        assertEquals(1, Uci.rank("info depth 12 score cp 20 pv e2e4"))
+        assertNull(Uci.rank("info depth 12 currmove e2e4 currmovenumber 1"))
+        assertNull(Uci.rank("bestmove e2e4"))
+    }
+
+    @Test
     fun infoLinesBecomeLinesFromWhitesView() {
         val line = Uci.parseInfo("info depth 12 seldepth 15 multipv 1 score cp -31 nodes 22841 pv c7c5 g1f3", whiteToMove = false)
         assertEquals(EngineLine(1, 12, Score(cp = 31), listOf("c7c5", "g1f3")), line)
@@ -113,5 +121,114 @@ class UciTest {
         yield()
         assertEquals(listOf("position fen ${Position.START.fen}", "go depth 12"), engine.sent.takeLast(2))
         next.cancel()
+    }
+
+    @Test
+    fun anEngineThatEndsShortOfTheDepthSearchesOn() = runTest {
+        // Reckless with several threads: "go depth 12" ends while the reported lines are at 10.
+        val engine = FakeEngine()
+        val session = EngineSession(engine)
+        session.start(emptyMap())
+        var seen = emptyList<EngineLine>()
+        var finished: Boolean? = null
+        val search = launch { finished = session.analyse(afterE4, depth = 12) { seen = it } }
+        yield()
+        engine.say(
+            "info depth 10 multipv 1 score cp -30 pv c7c5",
+            "info depth 10 multipv 2 score cp -35 pv e7e5",
+            "bestmove c7c5",
+        )
+        yield()
+        // Two short, so it asks for a good deal more than the two that are missing.
+        assertEquals("go depth 22", engine.sent.last())
+        assertNull(finished)
+        engine.say(
+            // From the start again: not shown, the board has depth 10 already.
+            "info depth 3 multipv 1 score cp -10 pv e7e5",
+            "info depth 11 multipv 1 score cp -29 pv c7c5",
+            "info depth 11 multipv 2 score cp -33 pv e7e5",
+            "info depth 12 multipv 1 score cp -28 pv c7c5",
+        )
+        yield()
+        // The first line is there, the second not yet.
+        assertEquals(listOf(12), seen.map { it.depth })
+        assertEquals("go depth 22", engine.sent.last())
+        engine.say("info depth 12 multipv 2 score cp -32 pv e7e5", "info depth 13 multipv 1 score cp -27 pv c7c5")
+        search.join()
+        // Both at the depth: stopped here, and what came after is not shown.
+        assertEquals("stop", engine.sent.last())
+        assertEquals(listOf(12, 12), seen.map { it.depth })
+        assertEquals(true, finished)
+        // The next position starts without another stop, and asks for more at once: one search instead of two.
+        seen = emptyList()
+        val next = launch { session.analyse(Position.START, depth = 12) { seen = it } }
+        yield()
+        assertEquals(listOf("stop", "position fen ${Position.START.fen}", "go depth 22"), engine.sent.takeLast(3))
+        engine.say(
+            "info depth 11 multipv 1 score cp 28 pv e2e4",
+            "info depth 11 multipv 2 score cp 25 pv d2d4",
+            "info depth 12 multipv 1 score cp 30 pv e2e4",
+            // The second line is not there yet at this depth: not the end.
+            "info depth 11 multipv 2 score cp 25 pv d2d4",
+            "info depth 12 multipv 1 score cp 30 pv e2e4",
+            "info depth 12 multipv 2 score cp 26 pv d2d4",
+        )
+        next.join()
+        assertEquals("stop", engine.sent.last())
+        assertEquals(listOf(12, 12), seen.map { it.depth })
+    }
+
+    @Test
+    fun anEngineThatKeepsEndingShortIsBelievedInTheEnd() = runTest {
+        val engine = FakeEngine()
+        val session = EngineSession(engine)
+        session.start(emptyMap())
+        var seen = emptyList<EngineLine>()
+        val search = launch { session.analyse(afterE4, depth = 12) { seen = it } }
+        yield()
+        repeat(3) {
+            engine.say("info depth 4 multipv 1 score cp -30 pv c7c5", "bestmove c7c5")
+            yield()
+        }
+        search.join()
+        assertEquals(3, engine.sent.count { it.startsWith("go depth") }, engine.sent.toString())
+        assertEquals(4, seen.single().depth)
+    }
+
+    @Test
+    fun aMateEndsTheSearchBeforeTheDepth() = runTest {
+        val engine = FakeEngine()
+        val session = EngineSession(engine)
+        session.start(emptyMap())
+        val search = launch { session.analyse(afterE4, depth = 12) { } }
+        yield()
+        engine.say("info depth 5 multipv 1 score mate 3 pv d8h4", "bestmove d8h4")
+        search.join()
+        assertEquals(1, engine.sent.count { it.startsWith("go depth") }, engine.sent.toString())
+    }
+
+    @Test
+    fun endingInTheMiddleOfADepthKeepsTheLastWholeOne() = runTest {
+        val engine = FakeEngine()
+        val session = EngineSession(engine)
+        session.start(emptyMap())
+        var seen = emptyList<EngineLine>()
+        val search = launch { session.analyse(afterE4, depth = 10) { seen = it } }
+        yield()
+        engine.say(
+            "info depth 10 multipv 1 score cp -30 pv c7c5",
+            "info depth 10 multipv 2 score cp -35 pv e7e5",
+            "info depth 10 multipv 3 score cp -40 pv e7e6",
+            // Stopped on the way to 11: the second line is only a bound, the third still the old one.
+            "info depth 11 multipv 1 score cp -29 pv c7c5",
+            "info depth 11 multipv 2 score cp -31 lowerbound pv e7e6",
+            "info depth 10 multipv 3 score cp -35 pv e7e5",
+            "bestmove c7c5",
+        )
+        search.join()
+        assertEquals(listOf(1, 2, 3), seen.map { it.multipv })
+        assertEquals(listOf("c7c5", "e7e5", "e7e6"), seen.map { it.pv.first() })
+        assertTrue(seen.all { it.depth == 10 })
+        assertEquals(1, engine.sent.count { it.startsWith("go depth") }, engine.sent.toString())
     }
 }

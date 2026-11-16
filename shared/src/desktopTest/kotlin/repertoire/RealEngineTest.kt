@@ -49,9 +49,28 @@ class RealEngineTest {
             var found = emptyList<EngineLine>()
             session.analyse(Position.START, 10) { found = it }
             assertEquals(3, found.size, "drei Linien am Ende: $found")
-            assertTrue(found.all { it.depth == 10 }, "alle auf Tiefe 10: $found")
+            // Stockfish ends at the depth exactly; Reckless with several threads may be one further.
+            assertTrue(found.all { it.depth >= 10 }, "alle mindestens auf Tiefe 10: $found")
             val moves = (1..3).map { repertoire.ui.opponentMove(found, it) }
             assertEquals(3, moves.toSet().size, "drei verschiedene Züge: $moves")
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
+    fun withManyThreadsTheDepthIsStillReached() = runBlocking {
+        // Reckless ends "go depth" when most threads are there; the lines it reports may be behind.
+        val path = path ?: return@runBlocking
+        val session = EngineSession(launchEngine(path))
+        try {
+            session.start(mapOf("Threads" to repertoire.core.processorCount().toString(), "Hash" to "256", "MultiPV" to "3"))
+            repeat(3) {
+                var found = emptyList<EngineLine>()
+                assertTrue(session.analyse(Position.START, 20) { found = it })
+                assertEquals(3, found.size, "drei Linien am Ende: $found")
+                assertTrue(found.all { it.depth >= 20 }, "alle mindestens auf Tiefe 20: $found")
+            }
         } finally {
             session.close()
         }
